@@ -5,6 +5,9 @@ browser‑based **bark detector**.  The app loads a pre‑recorded audio file, p
 frequency analysis in the browser, and displays a visual indicator when the audio contains a
 frequency signature that matches a dog bark.
 
+## TEST IT
+[SubWoofer](https://jjllrrvvrr.github.io/SubWoofer/)
+
 ## Features
 
 - **Audio playback** – Uses the native Web Audio API to play a WAV/MP3 file.
