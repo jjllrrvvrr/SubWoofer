@@ -2,338 +2,364 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>SubWoofer 🐶</title>
     <style>
-        /* Design sombre pour économiser la batterie */
         body { 
             font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
             text-align: center; 
             padding: 20px; 
-            background: #000000; 
+            background: #000; 
             color: #fff; 
-            touch-action: manipulation; /* Empêche le zoom double-tap */
+            touch-action: manipulation;
         }
         
-        h1 { font-size: 1.8rem; margin-bottom: 5px; }
-        .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 25px; }
-
-        /* Le compteur géant */
+        /* Compteur */
         #timer { 
-            font-size: 4.5rem; 
-            font-weight: 200; 
+            font-size: 4rem; 
+            font-weight: 700; 
             font-variant-numeric: tabular-nums; 
-            margin: 20px 0;
-            color: #fff;
+            color: #ff9f0a;
+            margin-top: 20px;
         }
+        .timer-label { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 30px;}
 
-        /* Indicateur d'état (REC / PAUSE) */
+        /* Badges */
         #status-badge {
             display: inline-block;
-            padding: 5px 12px;
+            padding: 8px 16px;
             border-radius: 20px;
-            font-size: 0.8rem;
+            font-size: 0.9rem;
             font-weight: bold;
             text-transform: uppercase;
             background: #333;
             color: #888;
             margin-bottom: 20px;
         }
-        .status-rec { background: #ff3b30 !important; color: white !important; animation: pulse 1s infinite; }
-        .status-listen { background: #30d158 !important; color: white !important; }
-        .status-pause { background: #ff9f0a !important; color: black !important; }
+        .status-rec { background: #ff3b30 !important; color: white !important; box-shadow: 0 0 15px #ff3b30; animation: pulse 1s infinite; }
+        .status-wait { background: #30d158 !important; color: black !important; }
+        .status-cooldown { background: #ff9f0a !important; color: black !important; }
 
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
 
-        /* Visualiseur Audio */
-        canvas { 
-            width: 100%; 
-            height: 100px; 
-            background: #1c1c1e; 
-            border-radius: 10px; 
+        /* Canvas */
+        .vis-container {
+            position: relative;
+            height: 120px;
+            background: #1c1c1e;
+            border-radius: 12px;
+            overflow: hidden;
             border: 1px solid #333;
+            margin-bottom: 20px;
+        }
+        canvas { width: 100%; height: 100%; }
+        
+        /* Ligne de seuil draggable (visuelle seulement ici, contrôlée par slider) */
+        #threshold-line {
+            position: absolute;
+            left: 0; right: 0;
+            height: 2px;
+            background-color: #0a84ff;
+            top: 80%; /* Valeur par défaut */
+            pointer-events: none;
+            box-shadow: 0 0 5px #0a84ff;
         }
 
-        /* Slider de réglage */
-        .slider-box { margin: 20px 0; padding: 15px; background: #1c1c1e; border-radius: 12px; }
-        input[type=range] { width: 100%; accent-color: #0a84ff; height: 30px; }
-        .slider-info { display: flex; justify-content: space-between; font-size: 0.75rem; color: #888; margin-top: 5px; }
+        /* Slider */
+        input[type=range] { width: 100%; margin: 15px 0; accent-color: #0a84ff; cursor: pointer; height: 40px;}
 
-        /* Zone des Boutons */
-        .controls { 
-            display: flex; 
-            flex-direction: column; 
-            gap: 15px; 
-            margin-top: 30px; 
-        }
-
+        /* Boutons */
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .full-width { grid-column: span 2; }
+        
         button { 
-            font-size: 1.2rem; 
+            font-size: 1.1rem; 
             padding: 20px; 
             border-radius: 16px; 
             border: none; 
-            font-weight: 600; 
-            cursor: pointer; 
-            width: 100%;
-            transition: transform 0.1s;
+            font-weight: 700; 
+            color: white;
+            cursor: pointer;
         }
-        button:active { transform: scale(0.98); }
-
-        /* Couleurs des boutons */
-        .btn-start { background: #30d158; color: white; }
-        .btn-pause { background: #ff9f0a; color: black; }
-        .btn-resume { background: #30d158; color: white; }
-        .btn-stop { background: #ff3b30; color: white; }
+        button:active { opacity: 0.8; transform: scale(0.98); }
         
-        /* Utilitaires */
-        .hidden { display: none !important; }
+        .btn-start { background: #30d158; color: #000; }
+        .btn-pause { background: #ff9f0a; color: #000; }
+        .btn-stop { background: #ff3b30; color: #fff; }
+        .hidden { display: none; }
+
     </style>
 </head>
 <body>
 
-    <h1>SubWoofer</h1>
-    <p class="subtitle">Enregistreur intelligent d'aboiements</p>
-
     <div id="status-badge">Prêt</div>
+    
     <div id="timer">00:00:00</div>
+    <div class="timer-label">Durée cumulée des aboiements</div>
 
-    <canvas id="visualizer"></canvas>
-
-    <div class="slider-box">
-        <div class="slider-info" style="margin-bottom:5px; font-size:0.9rem; color:white;">Seuil de déclenchement (Ligne Bleue)</div>
-        <input type="range" id="threshold" min="0" max="255" value="40">
-        <div class="slider-info">
-            <span>Sensible (bruits faibles)</span>
-            <span>Moins sensible (bruits forts)</span>
-        </div>
+    <div class="vis-container">
+        <canvas id="visualizer"></canvas>
+        <div id="threshold-line"></div>
     </div>
 
-    <div class="controls">
-        <!-- État 1 : Au début -->
-        <button id="btn-start" class="btn-start" onclick="startSystem()">▶ DÉMARRER</button>
+    <div style="text-align:left; color:#888; font-size:0.8rem; margin-bottom:5px;">RÉGLAGE SENSIBILITÉ (Monter = moins sensible)</div>
+    <input type="range" id="slider" min="0" max="255" value="50" oninput="updateThresholdUI()">
 
-        <!-- État 2 : Pendant l'enregistrement -->
-        <div id="active-controls" class="hidden" style="display:flex; gap:10px;">
-            <button id="btn-pause" class="btn-pause" style="flex:1" onclick="togglePause()">⏸ PAUSE</button>
-            <button id="btn-stop" class="btn-stop" style="flex:1" onclick="stopAndSave()">⏹ STOP & SAVE</button>
-        </div>
+    <div class="controls">
+        <button id="btn-start" class="btn-start full-width" onclick="startApp()">▶ DÉMARRER SURVEILLANCE</button>
         
-        <!-- Lien de téléchargement caché -->
-        <a id="download-link" style="display:none"></a>
+        <button id="btn-pause" class="btn-pause hidden" onclick="togglePause()">⏸ PAUSE</button>
+        <button id="btn-stop" class="btn-stop hidden" onclick="stopAndDownload()">⏹ FINIR & TÉLÉCHARGER</button>
     </div>
 
     <script>
+        // --- CONFIGURATION ---
+        const SILENCE_DELAY = 2000; // 2 secondes de sécurité après le bruit
+        
         // --- VARIABLES ---
-        let audioCtx, analyser, source, mediaRecorder;
-        let chunks = [];
-        let isRunning = false;
-        let isPaused = false;
+        let audioCtx, analyser, microphone, mediaRecorder;
+        let masterChunks = []; // Tous les petits bouts d'enregistrement
+        let currentSegment = []; // Le bout en cours
+        
+        let isSystemActive = false; // Est-ce que l'app tourne ?
+        let isRecording = false; // Est-ce qu'on écrit dans le fichier ?
+        let isPausedManual = false; // Pause utilisateur
+        
         let lastNoiseTime = 0;
-        let accumulatedTime = 0; // Temps total d'aboiement en ms
+        let totalDuration = 0; // Durée totale en ms
         let animationId;
-        
-        // Configuration
-        const COOLDOWN = 2000; // 2 secondes de marge après le bruit
-        
-        // Éléments DOM
+
+        // UI Elements
         const canvas = document.getElementById('visualizer');
         const ctx = canvas.getContext('2d');
         const timerEl = document.getElementById('timer');
-        const badgeEl = document.getElementById('status-badge');
-        const sliderEl = document.getElementById('threshold');
+        const badge = document.getElementById('status-badge');
+        const slider = document.getElementById('slider');
+        const line = document.getElementById('threshold-line');
         
-        const btnStart = document.getElementById('btn-start');
-        const activeControls = document.getElementById('active-controls');
-        const btnPause = document.getElementById('btn-pause');
-
-        // --- FONCTIONS PRINCIPALES ---
-
-        async function startSystem() {
+        // --- INITIALISATION ---
+        async function startApp() {
             try {
-                // 1. Init Audio
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 256;
-                source = audioCtx.createMediaStreamSource(stream);
-                source.connect(analyser);
+                analyser.fftSize = 512;
+                
+                microphone = audioCtx.createMediaStreamSource(stream);
+                microphone.connect(analyser);
 
-                // 2. Init Recorder
-                // On essaie d'utiliser un format compatible iPhone
-                let options = { mimeType: 'audio/mp4' };
-                if (!MediaRecorder.isTypeSupported('audio/mp4')) {
-                    options = { mimeType: 'audio/webm' }; // Fallback Android/PC
-                }
-                
-                mediaRecorder = new MediaRecorder(stream, options);
-                mediaRecorder.ondataavailable = e => { if(e.data.size > 0) chunks.push(e.data); };
-                mediaRecorder.start(); 
-                mediaRecorder.pause(); // On commence en pause (attente de bruit)
+                // Initialisation du Recorder (On le garde prêt mais inactif)
+                setupRecorder(stream);
 
-                // 3. UI
-                isRunning = true;
-                isPaused = false;
-                btnStart.classList.add('hidden');
-                activeControls.classList.remove('hidden');
-                activeControls.style.display = 'flex';
-                
-                visualize();
-                
-            } catch (err) {
-                alert("Erreur micro : Vérifiez les réglages Safari.\n" + err);
+                isSystemActive = true;
+                updateUI('running');
+                loop();
+
+            } catch (e) {
+                alert("Erreur Micro: " + e.message);
             }
         }
 
-        function togglePause() {
-            if (!isPaused) {
-                // Mettre en PAUSE MANUELLE
-                isPaused = true;
-                btnPause.innerText = "▶ REPRENDRE";
-                btnPause.className = "btn-resume"; // Devient vert
-                badgeEl.innerText = "EN PAUSE";
-                badgeEl.className = "status-pause";
-                
-                if (mediaRecorder.state === "recording") {
-                    mediaRecorder.pause();
-                }
-            } else {
-                // Reprendre
-                isPaused = false;
-                btnPause.innerText = "⏸ PAUSE";
-                btnPause.className = "btn-pause"; // Devient jaune
-                // On laisse la boucle visualize gérer l'état du recorder
+        // Configuration pour iOS/Android
+        function setupRecorder(stream) {
+            // iOS préfère mp4, Chrome préfère webm.
+            // Pour pouvoir coller les morceaux, 'video/webm' ou 'audio/webm' est le plus stable
+            // Mais sur iOS, on va tenter le mp4 si webm n'est pas dispo.
+            let options = { mimeType: 'audio/webm' };
+            if (!MediaRecorder.isTypeSupported('audio/webm')) {
+                options = { mimeType: 'audio/mp4' }; // Fallback iOS
             }
-        }
-
-        function stopAndSave() {
-            isRunning = false;
-            cancelAnimationFrame(animationId);
             
-            // Arrêt final
-            if (mediaRecorder && mediaRecorder.state !== "inactive") {
-                mediaRecorder.stop();
-                
-                // Attendre un peu que le dernier chunk soit traité
-                setTimeout(() => {
-                    const blob = new Blob(chunks, { type: 'audio/mp4' }); // ou webm
-                    const url = URL.createObjectURL(blob);
-                    
-                    // Téléchargement
-                    const a = document.getElementById('download-link');
-                    a.href = url;
-                    // Nom du fichier avec date
-                    const date = new Date();
-                    const fileName = `SubWoofer_${date.getHours()}h${date.getMinutes()}.mp4`;
-                    a.download = fileName;
-                    a.click();
-                    
-                    if(confirm("Fichier téléchargé ! Voulez-vous remettre à zéro ?")) {
-                        location.reload();
-                    }
-                }, 100);
-            }
+            // On recrée une instance à chaque segment pour éviter les bugs de concaténation
+            // Note: On n'instancie pas ici, on le fera à la volée dans startSegment
+            window.globalStream = stream; // Sauvegarde globale pour réutilisation
+            window.recOptions = options;
         }
 
-        // --- BOUCLE DE DÉTECTION ---
-        function visualize() {
-            if (!isRunning) return;
-            animationId = requestAnimationFrame(visualize);
+        function startSegment() {
+            if (isRecording) return;
+            
+            // Création d'un NOUVEAU recorder pour ce segment
+            mediaRecorder = new MediaRecorder(window.globalStream, window.recOptions);
+            currentSegment = [];
+            
+            mediaRecorder.ondataavailable = e => {
+                if (e.data.size > 0) currentSegment.push(e.data);
+            };
+            
+            mediaRecorder.onstop = () => {
+                // Quand ce segment est fini, on l'ajoute au master
+                const blob = new Blob(currentSegment, { type: window.recOptions.mimeType });
+                masterChunks.push(blob);
+                console.log("Segment sauvegardé. Total segments: " + masterChunks.length);
+            };
 
-            // 1. Si on est en pause manuelle, on dessine juste un écran noir et on sort
-            if (isPaused) {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                return;
+            mediaRecorder.start();
+            isRecording = true;
+            badge.innerText = "ENREGISTREMENT...";
+            badge.className = "status-rec";
+        }
+
+        function stopSegment() {
+            if (!isRecording) return;
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
             }
+            isRecording = false;
+            badge.innerText = "En veille (Écoute)";
+            badge.className = "status-wait";
+        }
 
-            // 2. Analyse Audio
+        // --- BOUCLE PRINCIPALE ---
+        function loop() {
+            if (!isSystemActive) return;
+            animationId = requestAnimationFrame(loop);
+
+            if (isPausedManual) return;
+
+            // 1. Analyse du volume
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
-
-            // Calcul Volume Moyen
-            let sum = 0;
-            for(let i = 0; i < bufferLength; i++) sum += dataArray[i];
-            let volume = sum / bufferLength;
-
-            // Récupère le seuil du slider
-            let threshold = parseInt(sliderEl.value);
-
-            // 3. Dessin
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Barre de volume
-            let barHeight = (volume / 255) * canvas.height;
-            // Couleur rouge si > seuil, vert sinon
-            ctx.fillStyle = volume > threshold ? '#ff3b30' : '#30d158';
-            ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
+            let sum = 0;
+            for(let i=0; i<bufferLength; i++) sum += dataArray[i];
+            let volume = sum / bufferLength; // Moyenne 0-255
 
-            // Ligne de seuil (Bleue)
-            let thY = canvas.height - (threshold / 255) * canvas.height;
-            ctx.beginPath();
-            ctx.strokeStyle = '#0a84ff';
-            ctx.lineWidth = 3;
-            ctx.moveTo(0, thY);
-            ctx.lineTo(canvas.width, thY);
-            ctx.stroke();
+            // 2. Seuil (inversé graphiquement : haut du slider = bas de l'écran)
+            let threshold = parseInt(slider.value);
+            
+            // 3. Dessin
+            drawVisualizer(volume, threshold);
 
-            // 4. Logique d'enregistrement "Intelligente"
-            const now = Date.now();
+            // 4. Logique de décision
+            let now = Date.now();
 
             if (volume > threshold) {
-                // BRUIT DÉTECTÉ
+                // BRUIT
                 lastNoiseTime = now;
                 
-                if (mediaRecorder.state === "paused") {
-                    mediaRecorder.resume();
+                if (!isRecording) {
+                    startSegment();
                 }
-                
-                badgeEl.innerText = "🔴 ENREGISTREMENT";
-                badgeEl.className = "status-rec";
-                
-                // Compteur + temps réel (approx 60fps -> 16ms)
-                accumulatedTime += 16.66;
-                timerEl.innerText = formatTime(accumulatedTime);
 
+                // Mise à jour Timer
+                totalDuration += 16.66; // ~60fps
+                timerEl.innerText = formatTime(totalDuration);
+                
             } else {
                 // SILENCE
-                // Est-ce qu'on est encore dans la "queue" de 2 secondes ?
-                if (now - lastNoiseTime < COOLDOWN) {
-                    // Oui : on continue d'enregistrer le silence de sécurité
-                    if (mediaRecorder.state === "paused") {
-                        mediaRecorder.resume(); 
+                let timeSinceNoise = now - lastNoiseTime;
+
+                if (timeSinceNoise < SILENCE_DELAY) {
+                    // Période tampon (on garde l'enregistrement actif)
+                    if (isRecording) {
+                        badge.innerText = "Fin d'aboiement...";
+                        badge.className = "status-cooldown";
+                        totalDuration += 16.66;
+                        timerEl.innerText = formatTime(totalDuration);
                     }
-                    badgeEl.innerText = "🔴 Fin d'aboiement...";
-                    badgeEl.className = "status-rec";
-                    
-                    // On compte aussi ce temps de sécurité dans le timer car ça enregistre
-                    accumulatedTime += 16.66;
-                    timerEl.innerText = formatTime(accumulatedTime);
-                    
                 } else {
-                    // Non : Vrai silence prolongé -> Pause recorder
-                    if (mediaRecorder.state === "recording") {
-                        mediaRecorder.pause();
+                    // Vrai silence -> On coupe
+                    if (isRecording) {
+                        stopSegment();
                     }
-                    badgeEl.innerText = "🟢 En écoute (Veille)";
-                    badgeEl.className = "status-listen";
                 }
             }
         }
 
-        // Formatage MM:SS:ms
+        // --- UI & OUTILS ---
+        function updateThresholdUI() {
+            // Bouge la ligne bleue selon le slider
+            let val = parseInt(slider.value);
+            let pct = (val / 255) * 100;
+            line.style.bottom = pct + "%";
+            line.style.top = "auto";
+        }
+
+        function drawVisualizer(vol, thresh) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Barre verte ou rouge
+            let h = (vol / 255) * canvas.height;
+            ctx.fillStyle = vol > thresh ? '#ff3b30' : '#30d158';
+            ctx.fillRect(0, canvas.height - h, canvas.width, h);
+        }
+
+        function togglePause() {
+            isPausedManual = !isPausedManual;
+            let btn = document.getElementById('btn-pause');
+            
+            if (isPausedManual) {
+                if (isRecording) stopSegment(); // Coupe si on était en train d'enregistrer
+                badge.innerText = "PAUSE MANUELLE";
+                badge.className = "";
+                btn.innerText = "▶ REPRENDRE";
+                btn.style.background = "#30d158";
+                btn.style.color = "white";
+                ctx.clearRect(0,0,canvas.width, canvas.height);
+            } else {
+                badge.innerText = "En veille";
+                badge.className = "status-wait";
+                btn.innerText = "⏸ PAUSE";
+                btn.style.background = "#ff9f0a";
+                btn.style.color = "black";
+            }
+        }
+
+        function stopAndDownload() {
+            isSystemActive = false;
+            cancelAnimationFrame(animationId);
+            if (isRecording) stopSegment();
+
+            setTimeout(() => {
+                if (masterChunks.length === 0) {
+                    alert("Aucun bruit détecté, rien à télécharger !");
+                    location.reload();
+                    return;
+                }
+
+                // Assemblage final
+                const finalBlob = new Blob(masterChunks, { type: window.recOptions.mimeType });
+                const url = URL.createObjectURL(finalBlob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "SubWoofer_Aboyements_" + formatTime(totalDuration).replace(/:/g, '-') + ".mp4"; // Ou .webm selon le support
+                document.body.appendChild(a);
+                a.click();
+                
+                badge.innerText = "Sauvegardé !";
+                
+                setTimeout(() => {
+                    if(confirm("Fichier généré ! Recommencer ?")) location.reload();
+                }, 1000);
+
+            }, 500); // Petit délai pour laisser le temps au dernier stopSegment de finir
+        }
+
+        function updateUI(state) {
+            if (state === 'running') {
+                document.getElementById('btn-start').classList.add('hidden');
+                document.getElementById('btn-pause').classList.remove('hidden');
+                document.getElementById('btn-stop').classList.remove('hidden');
+                document.querySelector('.full-width').classList.remove('full-width');
+            }
+        }
+
         function formatTime(ms) {
             let s = Math.floor(ms / 1000);
             let m = Math.floor(s / 60);
             let h = Math.floor(m / 60);
-            
-            s = s % 60;
-            m = m % 60;
-            
-            // Affiche seulement H:M:S pour faire propre
+            s = s % 60; m = m % 60;
             return `${pad(h)}:${pad(m)}:${pad(s)}`;
         }
         function pad(n) { return n.toString().padStart(2, '0'); }
+        
+        // Init UI position
+        updateThresholdUI();
+
     </script>
 </body>
 </html>
