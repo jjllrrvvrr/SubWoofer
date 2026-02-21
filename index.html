@@ -20,9 +20,9 @@
             font-weight: 700; 
             font-variant-numeric: tabular-nums; 
             color: #ff9f0a;
-            margin-top: 20px;
+            margin-top: 10px;
         }
-        .timer-label { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 30px;}
+        .timer-label { font-size: 0.8rem; color: #666; text-transform: uppercase; margin-bottom: 20px;}
 
         /* Badges */
         #status-badge {
@@ -45,28 +45,55 @@
         /* Canvas */
         .vis-container {
             position: relative;
-            height: 120px;
+            height: 150px;
             background: #1c1c1e;
             border-radius: 12px;
             overflow: hidden;
             border: 1px solid #333;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
         }
         canvas { width: 100%; height: 100%; }
         
-        /* Ligne de seuil draggable (visuelle seulement ici, contrôlée par slider) */
+        /* Ligne de seuil visuelle */
         #threshold-line {
             position: absolute;
             left: 0; right: 0;
             height: 2px;
             background-color: #0a84ff;
-            top: 80%; /* Valeur par défaut */
+            bottom: 10%; 
             pointer-events: none;
-            box-shadow: 0 0 5px #0a84ff;
+            box-shadow: 0 0 8px #0a84ff;
+            z-index: 10;
         }
 
-        /* Slider */
-        input[type=range] { width: 100%; margin: 15px 0; accent-color: #0a84ff; cursor: pointer; height: 40px;}
+        /* Slider Area */
+        .slider-container {
+            background: #2c2c2e;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+        .slider-value {
+            color: #0a84ff;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        /* Custom Range Slider */
+        input[type=range] { 
+            width: 100%; 
+            height: 40px; /* Zone tactile plus large */
+            accent-color: #0a84ff; 
+            cursor: pointer; 
+        }
 
         /* Boutons */
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
@@ -97,13 +124,24 @@
     <div id="timer">00:00:00</div>
     <div class="timer-label">Durée cumulée des aboiements</div>
 
+    <!-- Zone visuelle -->
     <div class="vis-container">
         <canvas id="visualizer"></canvas>
         <div id="threshold-line"></div>
     </div>
 
-    <div style="text-align:left; color:#888; font-size:0.8rem; margin-bottom:5px;">RÉGLAGE SENSIBILITÉ (Monter = moins sensible)</div>
-    <input type="range" id="slider" min="0" max="255" value="50" oninput="updateThresholdUI()">
+    <!-- Zone réglage -->
+    <div class="slider-container">
+        <div class="slider-header">
+            <span>Sensibilité (Seuil)</span>
+            <span id="slider-val" class="slider-value">20</span>
+        </div>
+        <!-- Max 120 sur 255 : on zoome sur la moitié basse du spectre sonore -->
+        <input type="range" id="slider" min="5" max="120" value="20" oninput="updateThresholdUI()">
+        <div style="font-size: 0.7rem; color: #666; margin-top: 5px; text-align: left;">
+            ℹ️ Réglez pour que la ligne bleue soit juste au-dessus du bruit de fond (barre verte).
+        </div>
+    </div>
 
     <div class="controls">
         <button id="btn-start" class="btn-start full-width" onclick="startApp()">▶ DÉMARRER SURVEILLANCE</button>
@@ -118,15 +156,15 @@
         
         // --- VARIABLES ---
         let audioCtx, analyser, microphone, mediaRecorder;
-        let masterChunks = []; // Tous les petits bouts d'enregistrement
-        let currentSegment = []; // Le bout en cours
+        let masterChunks = []; 
+        let currentSegment = []; 
         
-        let isSystemActive = false; // Est-ce que l'app tourne ?
-        let isRecording = false; // Est-ce qu'on écrit dans le fichier ?
-        let isPausedManual = false; // Pause utilisateur
+        let isSystemActive = false;
+        let isRecording = false;
+        let isPausedManual = false;
         
         let lastNoiseTime = 0;
-        let totalDuration = 0; // Durée totale en ms
+        let totalDuration = 0;
         let animationId;
 
         // UI Elements
@@ -135,21 +173,23 @@
         const timerEl = document.getElementById('timer');
         const badge = document.getElementById('status-badge');
         const slider = document.getElementById('slider');
+        const sliderValDisplay = document.getElementById('slider-val');
         const line = document.getElementById('threshold-line');
         
         // --- INITIALISATION ---
         async function startApp() {
             try {
+                // Demande micro
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 512;
+                analyser.fftSize = 512; // Résolution
                 
                 microphone = audioCtx.createMediaStreamSource(stream);
                 microphone.connect(analyser);
 
-                // Initialisation du Recorder (On le garde prêt mais inactif)
+                // Setup Recorder
                 setupRecorder(stream);
 
                 isSystemActive = true;
@@ -161,26 +201,20 @@
             }
         }
 
-        // Configuration pour iOS/Android
         function setupRecorder(stream) {
-            // iOS préfère mp4, Chrome préfère webm.
-            // Pour pouvoir coller les morceaux, 'video/webm' ou 'audio/webm' est le plus stable
-            // Mais sur iOS, on va tenter le mp4 si webm n'est pas dispo.
+            // iOS préfère mp4, Chrome préfère webm
             let options = { mimeType: 'audio/webm' };
             if (!MediaRecorder.isTypeSupported('audio/webm')) {
-                options = { mimeType: 'audio/mp4' }; // Fallback iOS
+                options = { mimeType: 'audio/mp4' }; 
             }
-            
-            // On recrée une instance à chaque segment pour éviter les bugs de concaténation
-            // Note: On n'instancie pas ici, on le fera à la volée dans startSegment
-            window.globalStream = stream; // Sauvegarde globale pour réutilisation
+            window.globalStream = stream;
             window.recOptions = options;
         }
 
         function startSegment() {
             if (isRecording) return;
             
-            // Création d'un NOUVEAU recorder pour ce segment
+            // Nouveau segment
             mediaRecorder = new MediaRecorder(window.globalStream, window.recOptions);
             currentSegment = [];
             
@@ -189,10 +223,9 @@
             };
             
             mediaRecorder.onstop = () => {
-                // Quand ce segment est fini, on l'ajoute au master
+                // Sauvegarde du segment
                 const blob = new Blob(currentSegment, { type: window.recOptions.mimeType });
                 masterChunks.push(blob);
-                console.log("Segment sauvegardé. Total segments: " + masterChunks.length);
             };
 
             mediaRecorder.start();
@@ -223,17 +256,18 @@
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
             
+            // Calculer la moyenne
             let sum = 0;
             for(let i=0; i<bufferLength; i++) sum += dataArray[i];
-            let volume = sum / bufferLength; // Moyenne 0-255
+            let volume = sum / bufferLength;
 
-            // 2. Seuil (inversé graphiquement : haut du slider = bas de l'écran)
+            // 2. Seuil
             let threshold = parseInt(slider.value);
             
             // 3. Dessin
             drawVisualizer(volume, threshold);
 
-            // 4. Logique de décision
+            // 4. Logique
             let now = Date.now();
 
             if (volume > threshold) {
@@ -244,8 +278,8 @@
                     startSegment();
                 }
 
-                // Mise à jour Timer
-                totalDuration += 16.66; // ~60fps
+                // Timer
+                totalDuration += 16.66;
                 timerEl.innerText = formatTime(totalDuration);
                 
             } else {
@@ -253,7 +287,7 @@
                 let timeSinceNoise = now - lastNoiseTime;
 
                 if (timeSinceNoise < SILENCE_DELAY) {
-                    // Période tampon (on garde l'enregistrement actif)
+                    // Sécurité (on continue d'enregistrer un peu)
                     if (isRecording) {
                         badge.innerText = "Fin d'aboiement...";
                         badge.className = "status-cooldown";
@@ -261,7 +295,7 @@
                         timerEl.innerText = formatTime(totalDuration);
                     }
                 } else {
-                    // Vrai silence -> On coupe
+                    // Vrai silence -> STOP
                     if (isRecording) {
                         stopSegment();
                     }
@@ -271,19 +305,34 @@
 
         // --- UI & OUTILS ---
         function updateThresholdUI() {
-            // Bouge la ligne bleue selon le slider
             let val = parseInt(slider.value);
+            
+            // Affiche la valeur
+            sliderValDisplay.innerText = val;
+
+            // Positionne la ligne bleue
+            // Le volume va de 0 à 255.
+            // La ligne doit se placer proportionnellement à la hauteur totale (255)
             let pct = (val / 255) * 100;
+            
+            // Inversion (bottom vs top) ou simple position bottom
             line.style.bottom = pct + "%";
-            line.style.top = "auto";
         }
 
         function drawVisualizer(vol, thresh) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             // Barre verte ou rouge
+            // Hauteur calculée sur max 255
             let h = (vol / 255) * canvas.height;
-            ctx.fillStyle = vol > thresh ? '#ff3b30' : '#30d158';
+            
+            // Couleur
+            if (vol > thresh) {
+                ctx.fillStyle = '#ff3b30'; // Rouge
+            } else {
+                ctx.fillStyle = '#30d158'; // Vert
+            }
+            
             ctx.fillRect(0, canvas.height - h, canvas.width, h);
         }
 
@@ -292,7 +341,7 @@
             let btn = document.getElementById('btn-pause');
             
             if (isPausedManual) {
-                if (isRecording) stopSegment(); // Coupe si on était en train d'enregistrer
+                if (isRecording) stopSegment();
                 badge.innerText = "PAUSE MANUELLE";
                 badge.className = "";
                 btn.innerText = "▶ REPRENDRE";
@@ -313,30 +362,35 @@
             cancelAnimationFrame(animationId);
             if (isRecording) stopSegment();
 
+            // Délai pour laisser le dernier bout s'enregistrer
             setTimeout(() => {
                 if (masterChunks.length === 0) {
-                    alert("Aucun bruit détecté, rien à télécharger !");
+                    alert("Aucun bruit détecté.");
                     location.reload();
                     return;
                 }
 
-                // Assemblage final
+                // Assemblage
                 const finalBlob = new Blob(masterChunks, { type: window.recOptions.mimeType });
                 const url = URL.createObjectURL(finalBlob);
                 
+                // Téléchargement
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = "SubWoofer_Aboyements_" + formatTime(totalDuration).replace(/:/g, '-') + ".mp4"; // Ou .webm selon le support
+                let date = new Date();
+                let timeStr = date.getHours() + "h" + date.getMinutes();
+                a.download = `SubWoofer_${timeStr}_Total-${formatTime(totalDuration).replace(/:/g,'-')}.mp4`;
+                
                 document.body.appendChild(a);
                 a.click();
                 
                 badge.innerText = "Sauvegardé !";
                 
                 setTimeout(() => {
-                    if(confirm("Fichier généré ! Recommencer ?")) location.reload();
+                    if(confirm("Fichier sauvegardé ! Relancer ?")) location.reload();
                 }, 1000);
 
-            }, 500); // Petit délai pour laisser le temps au dernier stopSegment de finir
+            }, 500); 
         }
 
         function updateUI(state) {
@@ -357,7 +411,7 @@
         }
         function pad(n) { return n.toString().padStart(2, '0'); }
         
-        // Init UI position
+        // Init
         updateThresholdUI();
 
     </script>
