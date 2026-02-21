@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SubWoofer v9 🐶</title>
+    <title>SubWoofer v10.1 🛡️</title>
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
@@ -12,400 +12,313 @@
             background: #000; 
             color: #fff; 
             touch-action: manipulation;
-            -webkit-user-select: none;
             user-select: none;
+            transition: background 0.3s;
         }
         
-        /* Compteur */
+        /* Mode Discret (Stealth) */
+        body.stealth-mode { background: #000; }
+        body.stealth-mode > *:not(.stealth-overlay) { display: none !important; }
+        .stealth-overlay { 
+            display: none; 
+            height: 100vh; flex-direction: column; justify-content: center; align-items: center; color: #333;
+        }
+        body.stealth-mode .stealth-overlay { display: flex; }
+
+        /* Compteur Principal */
         #timer { 
-            font-size: 3.5rem; 
-            font-weight: 700; 
-            font-variant-numeric: tabular-nums; 
-            color: #ff9f0a;
-            margin-top: 10px;
-            text-shadow: 0 0 20px rgba(255, 159, 10, 0.3);
+            font-size: 3.5rem; font-weight: 700; color: #ff9f0a; margin-top: 10px; 
+            font-variant-numeric: tabular-nums;
         }
-        .timer-label { font-size: 0.75rem; color: #666; text-transform: uppercase; margin-bottom: 20px; letter-spacing: 1px;}
+        .status-text { font-size: 0.9rem; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px;}
 
-        /* Status Badge */
-        #status-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 800;
-            text-transform: uppercase;
-            background: #2c2c2e;
-            color: #888;
-            margin-bottom: 15px;
-            border: 1px solid #333;
-        }
-        .status-rec { background: #ff3b30 !important; color: white !important; box-shadow: 0 0 15px #ff3b30; animation: pulse 1s infinite; border-color: #ff3b30 !important;}
-        .status-wait { background: #30d158 !important; color: #000 !important; border-color: #30d158 !important;}
-        
-        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } 100% { transform: scale(1); opacity: 1; } }
-
-        /* Visualizer */
-        .vis-container {
-            position: relative;
-            height: 120px;
-            background: #1c1c1e;
-            border-radius: 16px;
-            overflow: hidden;
-            border: 1px solid #333;
-            margin-bottom: 15px;
-            box-shadow: inset 0 0 20px #000;
+        /* Visualiseur */
+        .vis-wrapper {
+            position: relative; height: 120px; background: #1c1c1e;
+            border-radius: 12px; overflow: hidden; border: 1px solid #333; margin-bottom: 20px;
         }
         canvas { width: 100%; height: 100%; }
-        
-        #threshold-line {
-            position: absolute;
-            left: 0; right: 0;
-            height: 2px;
-            background-color: #0a84ff;
-            bottom: 20%; 
-            pointer-events: none;
-            box-shadow: 0 0 8px #0a84ff;
-            z-index: 10;
-            transition: bottom 0.1s ease-out;
+        #thresh-line {
+            position: absolute; left: 0; right: 0; height: 2px;
+            background: #0a84ff; bottom: 20%; pointer-events: none; transition: bottom 0.1s;
         }
 
-        /* Settings Card */
-        .card {
-            background: #1c1c1e;
-            padding: 15px;
-            border-radius: 16px;
-            margin-bottom: 20px;
-            border: 1px solid #333;
-            text-align: left;
-        }
+        /* Contrôles */
+        .controls-area { margin-top: 20px; }
         
-        .toggle-row {
-            display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #333;
-        }
-        .toggle-label { font-size: 0.9rem; font-weight: 600; }
-        .toggle-sub { font-size: 0.7rem; color: #666; display: block; margin-top: 2px; }
+        input[type=range] { width: 100%; height: 40px; accent-color: #0a84ff; margin-bottom: 10px;}
+        .range-label { display: flex; justify-content: space-between; color: #aaa; font-size: 0.8rem; margin-bottom: 5px;}
 
-        .switch-btn {
-            background: #3a3a3c; color: #888; border: none; padding: 8px 16px;
-            border-radius: 8px; font-size: 0.8rem; font-weight: bold; cursor: pointer;
-            transition: all 0.3s ease;
-        }
-        .switch-btn.active { background: #0a84ff; color: white; box-shadow: 0 0 10px rgba(10, 132, 255, 0.4); }
-
-        .slider-header { display: flex; justify-content: space-between; font-size: 0.8rem; color: #aaa; margin-bottom: 5px; }
-        .slider-value { color: #0a84ff; font-weight: bold; }
-        input[type=range] { width: 100%; height: 40px; accent-color: #0a84ff; cursor: pointer; }
-
-        /* Buttons */
-        .controls { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 10px; }
+        button { border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 1rem; width: 100%; margin-bottom: 10px; text-transform: uppercase;}
         
-        button.main-btn { 
-            font-size: 1rem; padding: 18px; border-radius: 14px; border: none; 
-            font-weight: 700; color: white; cursor: pointer; text-transform: uppercase;
-            transition: transform 0.1s;
-        }
-        button.main-btn:active { transform: scale(0.96); }
+        .btn-start { background: #30d158; color: #000; }
+        .btn-stop { background: #ff3b30; color: #fff; display: none; }
         
-        .btn-start { background: #30d158; color: #000; box-shadow: 0 4px 15px rgba(48, 209, 88, 0.3); }
-        .btn-stop { background: #ff3b30; color: #fff; }
-        .hidden { display: none; }
+        /* Boutons Options */
+        .options-row { display: flex; gap: 10px; margin-top: 10px; }
+        .btn-opt { background: #333; color: #ccc; font-size: 0.8rem; padding: 10px; }
+        
+        /* Zone de téléchargement finale */
+        #download-area { display: none; background: #1c1c1e; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        .btn-dl-audio { background: #0a84ff; color: white; margin-bottom: 15px; }
+        .btn-dl-txt { background: #333; color: #aaa; font-size: 0.8rem; text-transform: none; }
 
     </style>
 </head>
 <body>
 
-    <div id="status-badge">Prêt</div>
-    
-    <div id="timer">00:00:00</div>
-    <div class="timer-label">Durée cumulée (Exacte)</div>
-
-    <div class="vis-container">
-        <canvas id="visualizer"></canvas>
-        <div id="threshold-line"></div>
+    <!-- OVERLAY MODE DISCRET -->
+    <div class="stealth-overlay" onclick="toggleStealth()">
+        <div style="font-size: 3rem;">🐶</div>
+        <div style="margin-top:20px;">Enregistrement en cours...</div>
+        <div style="font-size: 0.7rem; margin-top:30px; border:1px solid #333; padding:5px 15px; border-radius:20px;">Toucher pour rallumer</div>
     </div>
 
-    <div class="card">
-        <div class="toggle-row">
-            <div>
-                <span class="toggle-label">🔍 Filtre Audio</span>
-                <span class="toggle-sub">Ignore bruits sourds & aigus</span>
+    <!-- INTERFACE PRINCIPALE -->
+    <div id="main-ui">
+        <div id="status" class="status-text">Prêt</div>
+        <div id="timer">00:00:00</div>
+
+        <div class="vis-wrapper">
+            <canvas id="vis"></canvas>
+            <div id="thresh-line"></div>
+        </div>
+
+        <div class="range-label">
+            <span>Sensibilité</span>
+            <span id="val-disp" style="color:#0a84ff; font-weight:bold;">20</span>
+        </div>
+        <input type="range" id="slider" min="5" max="100" value="20" oninput="uiUpdate()">
+
+        <div class="controls-area">
+            <button id="btn-start" class="btn-start" onclick="start()">▶ Démarrer</button>
+            <button id="btn-stop" class="btn-stop" onclick="stop()">⏹ Finir & Sauvegarder</button>
+            
+            <div class="options-row" id="opt-row" style="display:none;">
+                <button class="btn-opt" onclick="toggleStealth()">🌙 Écran Noir</button>
             </div>
-            <button id="btn-filter" class="switch-btn active" onclick="toggleFilter()">ACTIVÉ</button>
         </div>
-
-        <div class="slider-header">
-            <span>Sensibilité (Seuil)</span>
-            <span id="slider-val" class="slider-value">20</span>
-        </div>
-        <input type="range" id="slider" min="5" max="100" value="20" oninput="updateThresholdUI()">
     </div>
 
-    <div class="controls">
-        <button id="btn-start" class="main-btn btn-start" onclick="startApp()">▶ Démarrer Surveillance</button>
-        <button id="btn-stop" class="main-btn btn-stop hidden" onclick="stopAndSave()">⏹ Finir et Télécharger</button>
+    <!-- ZONE TÉLÉCHARGEMENT -->
+    <div id="download-area">
+        <h3 style="margin-top:0">Session Terminée</h3>
+        <p style="color:#888; font-size:0.9rem; margin-bottom:20px;">L'audio contient uniquement les bruits détectés (+ 2 sec avant chaque bruit).</p>
+        
+        <button class="btn-dl-audio" onclick="downloadWAV()">🎵 Télécharger l'Audio (.wav)</button>
+        <button class="btn-dl-txt" onclick="downloadLog()">📄 Télécharger le Rapport écrit</button>
+        <button class="btn-opt" onclick="location.reload()">🔄 Nouvelle Session</button>
     </div>
 
     <script>
-        // CONFIG
-        const SILENCE_DELAY_MS = 1500; // Temps de maintien après le bruit
+        // --- CONFIGURATION ---
         const SAMPLE_RATE = 44100;
+        const PRE_ROLL_SEC = 2.0; // 2 secondes de mémoire tampon
+        const SILENCE_DELAY = 2000; // 2 secondes de silence avant de couper
         
-        // VARS
-        let audioCtx, analyser, microphone, scriptProcessor;
+        // --- VARIABLES ---
+        let audioCtx, mic, analyser, processor;
         let isRunning = false;
         let isRecording = false;
-        let isFilterOn = true;
-        let recordedBuffers = []; // On stocke le son ici
-        let silenceStart = 0;
-        let frameCount = 0;
         
-        // UI ELEMENTS
-        const canvas = document.getElementById('visualizer');
+        let recordedChunks = [];  // Audio final
+        let preRollBuffer = [];   // Mémoire tampon (passé)
+        let silenceStart = 0;
+        
+        let eventLogs = [];
+        let sessionStart = null;
+
+        // UI Elements
+        const canvas = document.getElementById('vis');
         const ctx = canvas.getContext('2d');
         const timerEl = document.getElementById('timer');
-        const badge = document.getElementById('status-badge');
-        const slider = document.getElementById('slider');
-        const filterBtn = document.getElementById('btn-filter');
-        const line = document.getElementById('threshold-line');
 
-        async function startApp() {
+        async function start() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+                
+                mic = audioCtx.createMediaStreamSource(stream);
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 512;
                 
-                microphone = audioCtx.createMediaStreamSource(stream);
+                // Processeur Audio (Buffer ~0.09s)
+                processor = audioCtx.createScriptProcessor(4096, 1, 1);
                 
-                // Processeur de Script (Capture manuelle du son)
-                // BufferSize de 4096 = environ 92ms de son par paquet
-                scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
-
-                // Chainage: Micro -> Filtres (si actifs) -> Analyser -> Processor -> Destination
-                setupConnections();
-
-                scriptProcessor.onaudioprocess = (e) => {
-                    if (!isRunning) return;
-
-                    const inputData = e.inputBuffer.getChannelData(0);
-                    const bufferLen = inputData.length;
-                    
-                    // 1. Analyse du volume sur ce petit paquet de son
-                    let sum = 0;
-                    for(let i=0; i<bufferLen; i+=10) { // Optimisation: check 1 sample sur 10
-                        sum += Math.abs(inputData[i]);
-                    }
-                    let avg = sum / (bufferLen/10);
-                    let volume = avg * 500; // Amplification pour échelle 0-100
-
-                    let threshold = parseInt(slider.value);
-                    drawVisualizer(volume, threshold);
-
-                    // 2. Logique d'enregistrement "Intelligente"
-                    let now = Date.now();
-
-                    if (volume > threshold) {
-                        // BRUIT DÉTECTÉ
-                        isRecording = true;
-                        silenceStart = now; // Reset du timer silence
-                        badge.innerText = "ENREGISTREMENT...";
-                        badge.className = "status-rec";
-                    } else {
-                        // SILENCE
-                        if (isRecording) {
-                            if (now - silenceStart > SILENCE_DELAY_MS) {
-                                isRecording = false; // Stop
-                                badge.innerText = "En veille";
-                                badge.className = "status-wait";
-                            }
-                        }
-                    }
-
-                    // 3. Si on doit enregistrer, on garde ce paquet
-                    if (isRecording) {
-                        // On clone les données pour les sauvegarder
-                        recordedBuffers.push(new Float32Array(inputData));
-                        
-                        // Mise à jour Timer (basée sur la quantité réelle de données stockées)
-                        // bufferLen / SAMPLE_RATE = durée en secondes de ce paquet
-                        updateTimer();
-                    }
-                };
-
+                mic.connect(analyser);
+                analyser.connect(processor);
+                processor.connect(audioCtx.destination);
+                
+                processor.onaudioprocess = processAudio;
+                
                 isRunning = true;
-                updateUI('running');
+                sessionStart = new Date();
+                
+                // UI
+                document.getElementById('btn-start').style.display = 'none';
+                document.getElementById('btn-stop').style.display = 'block';
+                document.getElementById('opt-row').style.display = 'flex';
+                document.getElementById('status').innerText = "En écoute (Mémoire tampon active)";
+                document.getElementById('status').style.color = "#30d158";
 
-            } catch (e) {
-                alert("Erreur accès micro : " + e.message);
-            }
+            } catch (e) { alert("Erreur Micro: " + e); }
         }
 
-        function setupConnections() {
-            // Reset des connexions
-            microphone.disconnect();
-            if(analyser) analyser.disconnect();
-            if(scriptProcessor) scriptProcessor.disconnect();
-
-            // Création filtres dynamiques
-            let activeNode = microphone;
-
-            if (isFilterOn) {
-                const fHigh = audioCtx.createBiquadFilter();
-                fHigh.type = "highpass";
-                fHigh.frequency.value = 300;
-
-                const fLow = audioCtx.createBiquadFilter();
-                fLow.type = "lowpass";
-                fLow.frequency.value = 3000;
-
-                activeNode.connect(fHigh);
-                fHigh.connect(fLow);
-                activeNode = fLow;
-            }
-
-            activeNode.connect(analyser);
-            analyser.connect(scriptProcessor);
-            scriptProcessor.connect(audioCtx.destination); // Nécessaire pour que le processeur tourne
-        }
-
-        function updateTimer() {
-            // Calcul précis : (Nombre de paquets * taille paquet) / Fréquence
-            // C'est la durée physique exacte de l'audio stocké
-            let totalSamples = recordedBuffers.length * 4096; 
-            let totalMs = (totalSamples / SAMPLE_RATE) * 1000;
+        function processAudio(e) {
+            if(!isRunning) return;
             
-            let s = Math.floor(totalMs / 1000);
-            let m = Math.floor(s / 60);
-            let h = Math.floor(m / 60);
-            s = s % 60; m = m % 60;
+            const input = e.inputBuffer.getChannelData(0);
+            const chunk = new Float32Array(input); // Copie des données
+            const threshold = parseInt(document.getElementById('slider').value);
             
-            timerEl.innerText = `${pad(h)}:${pad(m)}:${pad(s)}`;
-        }
+            // 1. Analyse du volume
+            let sum = 0;
+            for(let i=0; i<chunk.length; i+=10) sum += Math.abs(chunk[i]);
+            let vol = (sum / (chunk.length/10)) * 500;
+            draw(vol, threshold);
 
-        function stopAndSave() {
-            isRunning = false;
-            
-            if (recordedBuffers.length === 0) {
-                alert("Aucun bruit détecté.");
-                location.reload();
-                return;
-            }
+            // 2. Gestion du Pre-Roll (On garde les dernières secondes en boucle)
+            preRollBuffer.push(chunk);
+            if(preRollBuffer.length > 25) preRollBuffer.shift(); // ~2.3 sec max
 
-            badge.innerText = "Création du fichier...";
+            // 3. Détection
+            let now = Date.now();
             
-            setTimeout(() => {
-                // 1. Fusionner tous les buffers en un seul
-                let totalLen = recordedBuffers.length * 4096;
-                let mergedBuffer = new Float32Array(totalLen);
-                let offset = 0;
-                for (let buf of recordedBuffers) {
-                    mergedBuffer.set(buf, offset);
-                    offset += buf.length;
+            if (vol > threshold) {
+                // BRUIT DÉTECTÉ
+                if (!isRecording) {
+                    isRecording = true;
+                    document.getElementById('status').innerText = "🔴 ENREGISTREMENT";
+                    document.getElementById('status').style.color = "#ff3b30";
+                    
+                    // ON RÉCUPÈRE LE PASSÉ (Pre-Roll)
+                    if(preRollBuffer.length > 0) {
+                        recordedChunks.push(...preRollBuffer);
+                    }
+                    
+                    eventLogs.push(`Bruit à ${new Date().toLocaleTimeString()}`);
                 }
+                silenceStart = now; // Reset du timer de silence
+            } else {
+                // SILENCE
+                if (isRecording && (now - silenceStart > SILENCE_DELAY)) {
+                    isRecording = false;
+                    document.getElementById('status').innerText = "En écoute...";
+                    document.getElementById('status').style.color = "#30d158";
+                }
+            }
 
-                // 2. Encoder en WAV
-                let wavBlob = encodeWAV(mergedBuffer, SAMPLE_RATE);
-                
-                // 3. Télécharger
-                const url = URL.createObjectURL(wavBlob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                
-                let date = new Date();
-                let timeStr = `${pad(date.getHours())}h${pad(date.getMinutes())}`;
-                let durationStr = timerEl.innerText.replace(/:/g,'-');
-                
-                a.download = `Chien_${timeStr}_Duree-${durationStr}.wav`;
-                
-                document.body.appendChild(a);
-                a.click();
-
-                badge.innerText = "Téléchargé !";
-                setTimeout(() => { 
-                    if(confirm("Fichier sauvegardé. Voulez-vous recommencer ?")) location.reload(); 
-                }, 1000);
-
-            }, 100);
+            // 4. Écriture
+            if (isRecording) {
+                recordedChunks.push(chunk);
+                updateTimer();
+            }
         }
 
-        // --- WAV ENCODER (Vanilla JS) ---
-        function encodeWAV(samples, sampleRate) {
+        function stop() {
+            isRunning = false;
+            if(audioCtx) audioCtx.close();
+            
+            document.getElementById('main-ui').style.display = 'none';
+            document.getElementById('download-area').style.display = 'block';
+        }
+
+        // --- EXPORT ---
+
+        function downloadWAV() {
+            if(recordedChunks.length === 0) { alert("Aucun bruit détecté !"); return; }
+            
+            // Assemblage du fichier
+            let length = recordedChunks.length * 4096;
+            let buffer = new Float32Array(length);
+            let offset = 0;
+            for(let c of recordedChunks) {
+                buffer.set(c, offset);
+                offset += c.length;
+            }
+            
+            let wav = encodeWAV(buffer);
+            let url = URL.createObjectURL(wav);
+            
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `Preuve_Audio_${new Date().getHours()}h${new Date().getMinutes()}.wav`;
+            document.body.appendChild(a);
+            a.click();
+        }
+
+        function downloadLog() {
+            let txt = "JOURNAL DE SURVEILLANCE\n";
+            txt += "Début : " + sessionStart.toLocaleString() + "\n";
+            txt += "-------------------------\n";
+            txt += eventLogs.join("\n");
+            
+            let blob = new Blob([txt], {type: 'text/plain'});
+            let url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = "Rapport.txt";
+            document.body.appendChild(a);
+            a.click();
+        }
+
+        // Encodage WAV (Standard PCM 16-bit)
+        function encodeWAV(samples) {
             const buffer = new ArrayBuffer(44 + samples.length * 2);
             const view = new DataView(buffer);
+            const writeString = (v, o, s) => { for (let i=0; i<s.length; i++) v.setUint8(o+i, s.charCodeAt(i)); };
 
-            // Fonction helper pour écrire des strings
-            const writeString = (view, offset, string) => {
-                for (let i = 0; i < string.length; i++) {
-                    view.setUint8(offset + i, string.charCodeAt(i));
-                }
-            };
-
-            // RIFF chunk descriptor
             writeString(view, 0, 'RIFF');
             view.setUint32(4, 36 + samples.length * 2, true);
             writeString(view, 8, 'WAVE');
-            // fmt sub-chunk
             writeString(view, 12, 'fmt ');
-            view.setUint32(16, 16, true);
-            view.setUint16(20, 1, true); // PCM
-            view.setUint16(22, 1, true); // Mono
-            view.setUint32(24, sampleRate, true);
-            view.setUint32(28, sampleRate * 2, true);
-            view.setUint16(32, 2, true);
-            view.setUint16(34, 16, true);
-            // data sub-chunk
+            view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+            view.setUint32(24, SAMPLE_RATE, true); view.setUint32(28, SAMPLE_RATE * 2, true);
+            view.setUint16(32, 2, true); view.setUint16(34, 16, true);
             writeString(view, 36, 'data');
             view.setUint32(40, samples.length * 2, true);
 
-            // Écriture des données audio PCM (Float -> Int16)
             let offset = 44;
             for (let i = 0; i < samples.length; i++) {
-                let s = Math.max(-1, Math.min(1, samples[i])); // Clamping
-                s = s < 0 ? s * 0x8000 : s * 0x7FFF; // Conversion
+                let s = Math.max(-1, Math.min(1, samples[i]));
+                s = s < 0 ? s * 0x8000 : s * 0x7FFF;
                 view.setInt16(offset, s, true);
                 offset += 2;
             }
-
             return new Blob([view], { type: 'audio/wav' });
         }
 
-        // --- HELPERS ---
-        function toggleFilter() {
-            isFilterOn = !isFilterOn;
-            filterBtn.classList.toggle("active");
-            filterBtn.innerText = isFilterOn ? "ACTIVÉ" : "DÉSACTIVÉ";
-            if(audioCtx) setupConnections(); // Reconfigure audio graph
+        // --- UI UTILS ---
+        function toggleStealth() {
+            document.body.classList.toggle('stealth-mode');
         }
 
-        function updateThresholdUI() {
-            let val = parseInt(slider.value);
-            document.getElementById('slider-val').innerText = val;
-            let pct = (val / 100) * 100; // Echelle adaptée au volume
-            line.style.bottom = pct + "%";
+        function updateTimer() {
+            let totalSeconds = (recordedChunks.length * 4096) / SAMPLE_RATE;
+            let h = Math.floor(totalSeconds / 3600);
+            let m = Math.floor((totalSeconds % 3600) / 60);
+            let s = Math.floor(totalSeconds % 60);
+            timerEl.innerText = `${pad(h)}:${pad(m)}:${pad(s)}`;
+        }
+        
+        function draw(vol, thresh) {
+            ctx.clearRect(0,0, canvas.width, canvas.height);
+            let h = (vol/100) * canvas.height;
+            ctx.fillStyle = vol > thresh ? '#ff3b30' : '#30d158';
+            ctx.fillRect(0, canvas.height - h, canvas.width, h);
         }
 
-        function drawVisualizer(vol, thresh) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let barHeight = (vol / 100) * canvas.height; 
-            
-            if (vol > thresh) ctx.fillStyle = '#ff3b30'; 
-            else ctx.fillStyle = '#30d158'; 
-            
-            ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
+        function uiUpdate() {
+            let val = document.getElementById('slider').value;
+            document.getElementById('val-disp').innerText = val;
+            document.getElementById('thresh-line').style.bottom = val + "%";
         }
-
-        function updateUI(state) {
-            document.getElementById('btn-start').classList.add('hidden');
-            document.getElementById('btn-stop').classList.remove('hidden');
-        }
-
-        function pad(n) { return n.toString().padStart(2, '0'); }
-
-        updateThresholdUI();
+        
+        function pad(n) { return n.toString().padStart(2,'0'); }
+        uiUpdate();
     </script>
 </body>
 </html>
