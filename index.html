@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SubWoofer v10.1 🛡️</title>
+    <title>SubWoofer v11 🐶</title>
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
@@ -13,9 +13,19 @@
             color: #fff; 
             touch-action: manipulation;
             user-select: none;
-            transition: background 0.3s;
+            -webkit-tap-highlight-color: transparent;
         }
         
+        /* Titre Principal */
+        h1 {
+            margin: 10px 0 5px 0;
+            background: linear-gradient(45deg, #ff9f0a, #ff3b30);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5rem;
+            letter-spacing: -1px;
+        }
+
         /* Mode Discret (Stealth) */
         body.stealth-mode { background: #000; }
         body.stealth-mode > *:not(.stealth-overlay) { display: none !important; }
@@ -25,16 +35,16 @@
         }
         body.stealth-mode .stealth-overlay { display: flex; }
 
-        /* Compteur Principal */
+        /* Compteur */
         #timer { 
-            font-size: 3.5rem; font-weight: 700; color: #ff9f0a; margin-top: 10px; 
+            font-size: 3rem; font-weight: 700; color: #fff; margin: 10px 0; 
             font-variant-numeric: tabular-nums;
         }
-        .status-text { font-size: 0.9rem; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px;}
+        .status-text { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;}
 
         /* Visualiseur */
         .vis-wrapper {
-            position: relative; height: 120px; background: #1c1c1e;
+            position: relative; height: 100px; background: #1c1c1e;
             border-radius: 12px; overflow: hidden; border: 1px solid #333; margin-bottom: 20px;
         }
         canvas { width: 100%; height: 100%; }
@@ -44,22 +54,24 @@
         }
 
         /* Contrôles */
-        .controls-area { margin-top: 20px; }
+        .controls-area { margin-top: 15px; }
         
         input[type=range] { width: 100%; height: 40px; accent-color: #0a84ff; margin-bottom: 10px;}
         .range-label { display: flex; justify-content: space-between; color: #aaa; font-size: 0.8rem; margin-bottom: 5px;}
 
-        button { border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 1rem; width: 100%; margin-bottom: 10px; text-transform: uppercase;}
+        button { border: none; padding: 15px; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 0.9rem; width: 100%; margin-bottom: 8px; text-transform: uppercase; transition: transform 0.1s;}
+        button:active { transform: scale(0.98); }
         
-        .btn-start { background: #30d158; color: #000; }
-        .btn-stop { background: #ff3b30; color: #fff; display: none; }
+        .btn-start { background: #30d158; color: #000; font-size: 1.2rem; }
+        .btn-stop { background: #ff3b30; color: #fff; display: none; font-size: 1.2rem;}
         
         /* Boutons Options */
         .options-row { display: flex; gap: 10px; margin-top: 10px; }
-        .btn-opt { background: #333; color: #ccc; font-size: 0.8rem; padding: 10px; }
+        .btn-opt { background: #333; color: #ccc; font-size: 0.8rem; padding: 12px; }
+        .btn-opt.active { background: #0a84ff; color: white; border: 1px solid #0a84ff; }
         
-        /* Zone de téléchargement finale */
-        #download-area { display: none; background: #1c1c1e; padding: 20px; border-radius: 12px; border: 1px solid #333; }
+        /* Zone de téléchargement */
+        #download-area { display: none; background: #1c1c1e; padding: 20px; border-radius: 12px; border: 1px solid #333; margin-top: 20px;}
         .btn-dl-audio { background: #0a84ff; color: white; margin-bottom: 15px; }
         .btn-dl-txt { background: #333; color: #aaa; font-size: 0.8rem; text-transform: none; }
 
@@ -70,13 +82,14 @@
     <!-- OVERLAY MODE DISCRET -->
     <div class="stealth-overlay" onclick="toggleStealth()">
         <div style="font-size: 3rem;">🐶</div>
-        <div style="margin-top:20px;">Enregistrement en cours...</div>
+        <div style="margin-top:20px;">Enregistrement Actif</div>
         <div style="font-size: 0.7rem; margin-top:30px; border:1px solid #333; padding:5px 15px; border-radius:20px;">Toucher pour rallumer</div>
     </div>
 
     <!-- INTERFACE PRINCIPALE -->
     <div id="main-ui">
-        <div id="status" class="status-text">Prêt</div>
+        <h1>SubWoofer</h1>
+        <div id="status" class="status-text">Prêt à l'écoute</div>
         <div id="timer">00:00:00</div>
 
         <div class="vis-wrapper">
@@ -85,7 +98,7 @@
         </div>
 
         <div class="range-label">
-            <span>Sensibilité</span>
+            <span>Sensibilité Déclenchement</span>
             <span id="val-disp" style="color:#0a84ff; font-weight:bold;">20</span>
         </div>
         <input type="range" id="slider" min="5" max="100" value="20" oninput="uiUpdate()">
@@ -95,6 +108,7 @@
             <button id="btn-stop" class="btn-stop" onclick="stop()">⏹ Finir & Sauvegarder</button>
             
             <div class="options-row" id="opt-row" style="display:none;">
+                <button class="btn-opt" id="btn-filt" onclick="toggleFilter()">🔍 Filtre Aboiement</button>
                 <button class="btn-opt" onclick="toggleStealth()">🌙 Écran Noir</button>
             </div>
         </div>
@@ -103,26 +117,30 @@
     <!-- ZONE TÉLÉCHARGEMENT -->
     <div id="download-area">
         <h3 style="margin-top:0">Session Terminée</h3>
-        <p style="color:#888; font-size:0.9rem; margin-bottom:20px;">L'audio contient uniquement les bruits détectés (+ 2 sec avant chaque bruit).</p>
+        <p style="color:#888; font-size:0.9rem; margin-bottom:20px;">
+            L'audio ne contient que les moments bruyants.<br>
+            (Avec 2 secondes de contexte avant chaque bruit).
+        </p>
         
         <button class="btn-dl-audio" onclick="downloadWAV()">🎵 Télécharger l'Audio (.wav)</button>
-        <button class="btn-dl-txt" onclick="downloadLog()">📄 Télécharger le Rapport écrit</button>
+        <button class="btn-dl-txt" onclick="downloadLog()">📄 Télécharger le Rapport Écrit</button>
         <button class="btn-opt" onclick="location.reload()">🔄 Nouvelle Session</button>
     </div>
 
     <script>
         // --- CONFIGURATION ---
         const SAMPLE_RATE = 44100;
-        const PRE_ROLL_SEC = 2.0; // 2 secondes de mémoire tampon
-        const SILENCE_DELAY = 2000; // 2 secondes de silence avant de couper
+        const PRE_ROLL_SEC = 2.0; 
+        const SILENCE_DELAY = 2000; 
         
         // --- VARIABLES ---
-        let audioCtx, mic, analyser, processor;
+        let audioCtx, mic, filterNode, analyser, processor;
         let isRunning = false;
         let isRecording = false;
+        let isFilterOn = false;
         
-        let recordedChunks = [];  // Audio final
-        let preRollBuffer = [];   // Mémoire tampon (passé)
+        let recordedChunks = [];  
+        let preRollBuffer = [];   
         let silenceStart = 0;
         
         let eventLogs = [];
@@ -138,14 +156,20 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
                 
+                // Chaîne Audio : Mic -> Filter -> Analyser -> Processor -> Speaker
                 mic = audioCtx.createMediaStreamSource(stream);
+                
+                filterNode = audioCtx.createBiquadFilter();
+                filterNode.type = 'highpass';
+                filterNode.frequency.value = 0; // Désactivé par défaut
+                
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 512;
                 
-                // Processeur Audio (Buffer ~0.09s)
                 processor = audioCtx.createScriptProcessor(4096, 1, 1);
                 
-                mic.connect(analyser);
+                mic.connect(filterNode);
+                filterNode.connect(analyser);
                 analyser.connect(processor);
                 processor.connect(audioCtx.destination);
                 
@@ -154,53 +178,52 @@
                 isRunning = true;
                 sessionStart = new Date();
                 
-                // UI
+                // Mise à jour UI
                 document.getElementById('btn-start').style.display = 'none';
                 document.getElementById('btn-stop').style.display = 'block';
                 document.getElementById('opt-row').style.display = 'flex';
-                document.getElementById('status').innerText = "En écoute (Mémoire tampon active)";
+                document.getElementById('status').innerText = "En écoute (Buffer actif)";
                 document.getElementById('status').style.color = "#30d158";
 
-            } catch (e) { alert("Erreur Micro: " + e); }
+            } catch (e) { alert("Erreur d'accès au micro : " + e); }
         }
 
         function processAudio(e) {
             if(!isRunning) return;
             
             const input = e.inputBuffer.getChannelData(0);
-            const chunk = new Float32Array(input); // Copie des données
+            const chunk = new Float32Array(input); 
             const threshold = parseInt(document.getElementById('slider').value);
             
-            // 1. Analyse du volume
+            // 1. Analyse volume
             let sum = 0;
             for(let i=0; i<chunk.length; i+=10) sum += Math.abs(chunk[i]);
             let vol = (sum / (chunk.length/10)) * 500;
             draw(vol, threshold);
 
-            // 2. Gestion du Pre-Roll (On garde les dernières secondes en boucle)
+            // 2. Gestion Pre-Roll (Mémoire tampon)
             preRollBuffer.push(chunk);
-            if(preRollBuffer.length > 25) preRollBuffer.shift(); // ~2.3 sec max
+            if(preRollBuffer.length > 25) preRollBuffer.shift(); 
 
-            // 3. Détection
+            // 3. Logique de détection
             let now = Date.now();
             
             if (vol > threshold) {
-                // BRUIT DÉTECTÉ
+                // Bruit détecté
                 if (!isRecording) {
                     isRecording = true;
                     document.getElementById('status').innerText = "🔴 ENREGISTREMENT";
                     document.getElementById('status').style.color = "#ff3b30";
                     
-                    // ON RÉCUPÈRE LE PASSÉ (Pre-Roll)
+                    // On colle le passé (Pre-Roll) au début
                     if(preRollBuffer.length > 0) {
                         recordedChunks.push(...preRollBuffer);
                     }
-                    
-                    eventLogs.push(`Bruit à ${new Date().toLocaleTimeString()}`);
+                    eventLogs.push(`Détection à ${new Date().toLocaleTimeString()}`);
                 }
-                silenceStart = now; // Reset du timer de silence
+                silenceStart = now;
             } else {
-                // SILENCE
+                // Silence
                 if (isRecording && (now - silenceStart > SILENCE_DELAY)) {
                     isRecording = false;
                     document.getElementById('status').innerText = "En écoute...";
@@ -215,6 +238,23 @@
             }
         }
 
+        // --- FONCTIONS FILTRE ---
+        function toggleFilter() {
+            if(!audioCtx) return;
+            isFilterOn = !isFilterOn;
+            
+            const btn = document.getElementById('btn-filt');
+            if(isFilterOn) {
+                filterNode.frequency.value = 800; // Coupe les sons graves (voitures, etc.)
+                btn.classList.add('active');
+                btn.innerText = "🔍 Filtre : ON";
+            } else {
+                filterNode.frequency.value = 0; // Laisse tout passer
+                btn.classList.remove('active');
+                btn.innerText = "🔍 Filtre : OFF";
+            }
+        }
+
         function stop() {
             isRunning = false;
             if(audioCtx) audioCtx.close();
@@ -223,12 +263,10 @@
             document.getElementById('download-area').style.display = 'block';
         }
 
-        // --- EXPORT ---
-
+        // --- EXPORT FICHIER ---
         function downloadWAV() {
             if(recordedChunks.length === 0) { alert("Aucun bruit détecté !"); return; }
             
-            // Assemblage du fichier
             let length = recordedChunks.length * 4096;
             let buffer = new Float32Array(length);
             let offset = 0;
@@ -243,15 +281,15 @@
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            a.download = `Preuve_Audio_${new Date().getHours()}h${new Date().getMinutes()}.wav`;
+            a.download = `SubWoofer_${new Date().getHours()}h${new Date().getMinutes()}.wav`;
             document.body.appendChild(a);
             a.click();
         }
-
+        
         function downloadLog() {
-            let txt = "JOURNAL DE SURVEILLANCE\n";
-            txt += "Début : " + sessionStart.toLocaleString() + "\n";
-            txt += "-------------------------\n";
+            let txt = "JOURNAL DE SURVEILLANCE - SUBWOOFER\n";
+            txt += "Date : " + sessionStart.toLocaleString() + "\n";
+            txt += "-----------------------------------\n";
             txt += eventLogs.join("\n");
             
             let blob = new Blob([txt], {type: 'text/plain'});
@@ -260,12 +298,11 @@
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            a.download = "Rapport.txt";
+            a.download = "Rapport_SubWoofer.txt";
             document.body.appendChild(a);
             a.click();
         }
 
-        // Encodage WAV (Standard PCM 16-bit)
         function encodeWAV(samples) {
             const buffer = new ArrayBuffer(44 + samples.length * 2);
             const view = new DataView(buffer);
@@ -292,10 +329,8 @@
         }
 
         // --- UI UTILS ---
-        function toggleStealth() {
-            document.body.classList.toggle('stealth-mode');
-        }
-
+        function toggleStealth() { document.body.classList.toggle('stealth-mode'); }
+        
         function updateTimer() {
             let totalSeconds = (recordedChunks.length * 4096) / SAMPLE_RATE;
             let h = Math.floor(totalSeconds / 3600);
