@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SubWoofer v8 🐶</title>
+    <title>SubWoofer v9 🐶</title>
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
@@ -80,7 +80,6 @@
             text-align: left;
         }
         
-        /* Filter Toggle */
         .toggle-row {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #333;
@@ -95,7 +94,6 @@
         }
         .switch-btn.active { background: #0a84ff; color: white; box-shadow: 0 0 10px rgba(10, 132, 255, 0.4); }
 
-        /* Slider */
         .slider-header { display: flex; justify-content: space-between; font-size: 0.8rem; color: #aaa; margin-bottom: 5px; }
         .slider-value { color: #0a84ff; font-weight: bold; }
         input[type=range] { width: 100%; height: 40px; accent-color: #0a84ff; cursor: pointer; }
@@ -121,7 +119,7 @@
     <div id="status-badge">Prêt</div>
     
     <div id="timer">00:00:00</div>
-    <div class="timer-label">Durée totale enregistrée</div>
+    <div class="timer-label">Durée cumulée (Exacte)</div>
 
     <div class="vis-container">
         <canvas id="visualizer"></canvas>
@@ -131,8 +129,8 @@
     <div class="card">
         <div class="toggle-row">
             <div>
-                <span class="toggle-label">🔍 Filtre "Aboiements"</span>
-                <span class="toggle-sub">Ignore < 300Hz (bruit sourd) et > 3kHz (vent)</span>
+                <span class="toggle-label">🔍 Filtre Audio</span>
+                <span class="toggle-sub">Ignore bruits sourds & aigus</span>
             </div>
             <button id="btn-filter" class="switch-btn active" onclick="toggleFilter()">ACTIVÉ</button>
         </div>
@@ -146,29 +144,24 @@
 
     <div class="controls">
         <button id="btn-start" class="main-btn btn-start" onclick="startApp()">▶ Démarrer Surveillance</button>
-        <button id="btn-stop" class="main-btn btn-stop hidden" onclick="finishAndSave()">⏹ Finir et Télécharger</button>
+        <button id="btn-stop" class="main-btn btn-stop hidden" onclick="stopAndSave()">⏹ Finir et Télécharger</button>
     </div>
 
     <script>
-        // --- PARAMÈTRES ---
-        const SILENCE_DELAY = 1500; // Ms de silence avant mise en pause
-        const LOW_FREQ = 300; 
-        const HIGH_FREQ = 3000;
+        // CONFIG
+        const SILENCE_DELAY_MS = 1500; // Temps de maintien après le bruit
+        const SAMPLE_RATE = 44100;
         
-        // --- GLOBAL VARIABLES ---
-        let audioCtx, analyser, microphone, mediaRecorder;
-        let chunks = []; 
-        
-        let isSystemActive = false;
-        let isRecordingState = false; // true = ça enregistre, false = c'est en pause
+        // VARS
+        let audioCtx, analyser, microphone, scriptProcessor;
+        let isRunning = false;
+        let isRecording = false;
         let isFilterOn = true;
+        let recordedBuffers = []; // On stocke le son ici
+        let silenceStart = 0;
+        let frameCount = 0;
         
-        let lastNoiseTime = 0;
-        let totalDuration = 0; // Durée réelle d'enregistrement
-        let startTime = 0; // Pour calculer le delta temps
-        let animationId;
-
-        // DOM Elements
+        // UI ELEMENTS
         const canvas = document.getElementById('visualizer');
         const ctx = canvas.getContext('2d');
         const timerEl = document.getElementById('timer');
@@ -181,182 +174,223 @@
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
-                // Audio Init
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 512;
-                analyser.smoothingTimeConstant = 0.3;
-
-                // Création Filtres
-                const filterHigh = audioCtx.createBiquadFilter();
-                filterHigh.type = "highpass";
-                filterHigh.frequency.value = isFilterOn ? LOW_FREQ : 0;
-
-                const filterLow = audioCtx.createBiquadFilter();
-                filterLow.type = "lowpass";
-                filterLow.frequency.value = isFilterOn ? HIGH_FREQ : 22000;
                 
-                // Connexions pour l'analyse visuelle
                 microphone = audioCtx.createMediaStreamSource(stream);
-                microphone.connect(filterHigh);
-                filterHigh.connect(filterLow);
-                filterLow.connect(analyser);
-
-                // Initialisation de l'enregistreur
-                setupRecorder(stream);
                 
-                // On lance l'enregistreur tout de suite...
-                mediaRecorder.start();
-                // ... mais on le met en pause immédiatement !
-                mediaRecorder.pause();
+                // Processeur de Script (Capture manuelle du son)
+                // BufferSize de 4096 = environ 92ms de son par paquet
+                scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
 
-                isSystemActive = true;
+                // Chainage: Micro -> Filtres (si actifs) -> Analyser -> Processor -> Destination
+                setupConnections();
+
+                scriptProcessor.onaudioprocess = (e) => {
+                    if (!isRunning) return;
+
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    const bufferLen = inputData.length;
+                    
+                    // 1. Analyse du volume sur ce petit paquet de son
+                    let sum = 0;
+                    for(let i=0; i<bufferLen; i+=10) { // Optimisation: check 1 sample sur 10
+                        sum += Math.abs(inputData[i]);
+                    }
+                    let avg = sum / (bufferLen/10);
+                    let volume = avg * 500; // Amplification pour échelle 0-100
+
+                    let threshold = parseInt(slider.value);
+                    drawVisualizer(volume, threshold);
+
+                    // 2. Logique d'enregistrement "Intelligente"
+                    let now = Date.now();
+
+                    if (volume > threshold) {
+                        // BRUIT DÉTECTÉ
+                        isRecording = true;
+                        silenceStart = now; // Reset du timer silence
+                        badge.innerText = "ENREGISTREMENT...";
+                        badge.className = "status-rec";
+                    } else {
+                        // SILENCE
+                        if (isRecording) {
+                            if (now - silenceStart > SILENCE_DELAY_MS) {
+                                isRecording = false; // Stop
+                                badge.innerText = "En veille";
+                                badge.className = "status-wait";
+                            }
+                        }
+                    }
+
+                    // 3. Si on doit enregistrer, on garde ce paquet
+                    if (isRecording) {
+                        // On clone les données pour les sauvegarder
+                        recordedBuffers.push(new Float32Array(inputData));
+                        
+                        // Mise à jour Timer (basée sur la quantité réelle de données stockées)
+                        // bufferLen / SAMPLE_RATE = durée en secondes de ce paquet
+                        updateTimer();
+                    }
+                };
+
+                isRunning = true;
                 updateUI('running');
-                loop();
 
             } catch (e) {
-                alert("Erreur micro : " + e.message);
+                alert("Erreur accès micro : " + e.message);
             }
         }
 
-        function setupRecorder(stream) {
-            let options = { mimeType: 'audio/webm' };
-            if (!MediaRecorder.isTypeSupported('audio/webm')) {
-                options = { mimeType: 'audio/mp4' }; // Fallback Safari
+        function setupConnections() {
+            // Reset des connexions
+            microphone.disconnect();
+            if(analyser) analyser.disconnect();
+            if(scriptProcessor) scriptProcessor.disconnect();
+
+            // Création filtres dynamiques
+            let activeNode = microphone;
+
+            if (isFilterOn) {
+                const fHigh = audioCtx.createBiquadFilter();
+                fHigh.type = "highpass";
+                fHigh.frequency.value = 300;
+
+                const fLow = audioCtx.createBiquadFilter();
+                fLow.type = "lowpass";
+                fLow.frequency.value = 3000;
+
+                activeNode.connect(fHigh);
+                fHigh.connect(fLow);
+                activeNode = fLow;
             }
-            
-            mediaRecorder = new MediaRecorder(stream, options);
-            
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) chunks.push(e.data);
-            };
 
-            mediaRecorder.onpause = () => {
-                isRecordingState = false;
-                badge.innerText = "En veille (Silence)";
-                badge.className = "status-wait";
-            };
-
-            mediaRecorder.onresume = () => {
-                isRecordingState = true;
-                badge.innerText = "ENREGISTREMENT...";
-                badge.className = "status-rec";
-            };
+            activeNode.connect(analyser);
+            analyser.connect(scriptProcessor);
+            scriptProcessor.connect(audioCtx.destination); // Nécessaire pour que le processeur tourne
         }
 
-        function loop() {
-            if (!isSystemActive) return;
-            animationId = requestAnimationFrame(loop);
-
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            analyser.getByteFrequencyData(dataArray);
+        function updateTimer() {
+            // Calcul précis : (Nombre de paquets * taille paquet) / Fréquence
+            // C'est la durée physique exacte de l'audio stocké
+            let totalSamples = recordedBuffers.length * 4096; 
+            let totalMs = (totalSamples / SAMPLE_RATE) * 1000;
             
-            // Calcul volume moyen
-            let sum = 0;
-            for(let i=0; i<bufferLength; i++) sum += dataArray[i];
-            let volume = sum / bufferLength;
+            let s = Math.floor(totalMs / 1000);
+            let m = Math.floor(s / 60);
+            let h = Math.floor(m / 60);
+            s = s % 60; m = m % 60;
+            
+            timerEl.innerText = `${pad(h)}:${pad(m)}:${pad(s)}`;
+        }
 
-            let threshold = parseInt(slider.value);
-            drawVisualizer(volume, threshold);
+        function stopAndSave() {
+            isRunning = false;
+            
+            if (recordedBuffers.length === 0) {
+                alert("Aucun bruit détecté.");
+                location.reload();
+                return;
+            }
 
-            let now = Date.now();
+            badge.innerText = "Création du fichier...";
+            
+            setTimeout(() => {
+                // 1. Fusionner tous les buffers en un seul
+                let totalLen = recordedBuffers.length * 4096;
+                let mergedBuffer = new Float32Array(totalLen);
+                let offset = 0;
+                for (let buf of recordedBuffers) {
+                    mergedBuffer.set(buf, offset);
+                    offset += buf.length;
+                }
 
-            if (volume > threshold) {
-                // BRUIT DÉTECTÉ
-                lastNoiseTime = now;
+                // 2. Encoder en WAV
+                let wavBlob = encodeWAV(mergedBuffer, SAMPLE_RATE);
                 
-                if (mediaRecorder.state === "paused") {
-                    mediaRecorder.resume();
-                    startTime = now; // On note quand ça a repris
-                } else {
-                    // C'est déjà en cours, on ajoute le temps écoulé depuis la dernière frame
-                    // C'est une estimation pour l'affichage, le vrai temps sera celui du fichier
-                    if (isRecordingState) {
-                       totalDuration += 16.66; // approx 60fps
-                       timerEl.innerText = formatTime(totalDuration); 
-                    }
-                }
-
-            } else {
-                // SILENCE
-                if (mediaRecorder.state === "recording") {
-                    let timeSinceNoise = now - lastNoiseTime;
-                    
-                    if (timeSinceNoise < SILENCE_DELAY) {
-                        // On continue d'enregistrer le "blanc" post-bruit
-                        totalDuration += 16.66;
-                        timerEl.innerText = formatTime(totalDuration); 
-                    } else {
-                        // Trop long silence -> PAUSE
-                        mediaRecorder.pause();
-                    }
-                }
-            }
-        }
-
-        function finishAndSave() {
-            isSystemActive = false;
-            cancelAnimationFrame(animationId);
-
-            if (mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-            }
-
-            // On attend que le fichier soit finalisé
-            mediaRecorder.onstop = () => {
-                if (chunks.length === 0) {
-                    alert("Aucun enregistrement (pas assez de bruit).");
-                    location.reload();
-                    return;
-                }
-
-                const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
-                const url = URL.createObjectURL(blob);
-                
+                // 3. Télécharger
+                const url = URL.createObjectURL(wavBlob);
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
                 
                 let date = new Date();
                 let timeStr = `${pad(date.getHours())}h${pad(date.getMinutes())}`;
-                let durationStr = formatTime(totalDuration).replace(/:/g,'-');
+                let durationStr = timerEl.innerText.replace(/:/g,'-');
                 
-                a.download = `Preuve_Aboiements_${timeStr}_Total-${durationStr}.mp4`;
+                a.download = `Chien_${timeStr}_Duree-${durationStr}.wav`;
                 
                 document.body.appendChild(a);
                 a.click();
-                
+
                 badge.innerText = "Téléchargé !";
                 setTimeout(() => { 
-                    if(confirm("Fichier sauvegardé. Relancer ?")) location.reload(); 
+                    if(confirm("Fichier sauvegardé. Voulez-vous recommencer ?")) location.reload(); 
                 }, 1000);
-            };
+
+            }, 100);
         }
 
-        // --- UI & Helpers ---
+        // --- WAV ENCODER (Vanilla JS) ---
+        function encodeWAV(samples, sampleRate) {
+            const buffer = new ArrayBuffer(44 + samples.length * 2);
+            const view = new DataView(buffer);
+
+            // Fonction helper pour écrire des strings
+            const writeString = (view, offset, string) => {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            };
+
+            // RIFF chunk descriptor
+            writeString(view, 0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeString(view, 8, 'WAVE');
+            // fmt sub-chunk
+            writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true); // PCM
+            view.setUint16(22, 1, true); // Mono
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true);
+            view.setUint16(32, 2, true);
+            view.setUint16(34, 16, true);
+            // data sub-chunk
+            writeString(view, 36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+
+            // Écriture des données audio PCM (Float -> Int16)
+            let offset = 44;
+            for (let i = 0; i < samples.length; i++) {
+                let s = Math.max(-1, Math.min(1, samples[i])); // Clamping
+                s = s < 0 ? s * 0x8000 : s * 0x7FFF; // Conversion
+                view.setInt16(offset, s, true);
+                offset += 2;
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        // --- HELPERS ---
         function toggleFilter() {
             isFilterOn = !isFilterOn;
             filterBtn.classList.toggle("active");
             filterBtn.innerText = isFilterOn ? "ACTIVÉ" : "DÉSACTIVÉ";
-            
-            // Re-appliquer les filtres si possible
-            // Note: avec cette méthode simple, le filtre est appliqué à l'analyseur
-            // mais l'enregistrement prend le flux "brut" du micro pour la qualité.
-            // Si vous voulez enregistrer le son filtré, c'est plus complexe, 
-            // mais pour l'analyse c'est parfait.
+            if(audioCtx) setupConnections(); // Reconfigure audio graph
         }
 
         function updateThresholdUI() {
             let val = parseInt(slider.value);
             document.getElementById('slider-val').innerText = val;
-            let pct = (val / 120) * 100; 
+            let pct = (val / 100) * 100; // Echelle adaptée au volume
             line.style.bottom = pct + "%";
         }
 
         function drawVisualizer(vol, thresh) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let barHeight = (vol / 120) * canvas.height; 
+            let barHeight = (vol / 100) * canvas.height; 
             
             if (vol > thresh) ctx.fillStyle = '#ff3b30'; 
             else ctx.fillStyle = '#30d158'; 
@@ -369,13 +403,6 @@
             document.getElementById('btn-stop').classList.remove('hidden');
         }
 
-        function formatTime(ms) {
-            let s = Math.floor(ms / 1000);
-            let m = Math.floor(s / 60);
-            let h = Math.floor(m / 60);
-            s = s % 60; m = m % 60;
-            return `${pad(h)}:${pad(m)}:${pad(s)}`;
-        }
         function pad(n) { return n.toString().padStart(2, '0'); }
 
         updateThresholdUI();
