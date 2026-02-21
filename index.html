@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SubWoofer v7 🐶</title>
+    <title>SubWoofer v8 🐶</title>
     <style>
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             text-align: center; 
             padding: 20px; 
             background: #000; 
@@ -42,11 +42,10 @@
         }
         .status-rec { background: #ff3b30 !important; color: white !important; box-shadow: 0 0 15px #ff3b30; animation: pulse 1s infinite; border-color: #ff3b30 !important;}
         .status-wait { background: #30d158 !important; color: #000 !important; border-color: #30d158 !important;}
-        .status-pause { background: #ff9f0a !important; color: #000 !important; }
-
+        
         @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } 100% { transform: scale(1); opacity: 1; } }
 
-        /* Visualizer Box */
+        /* Visualizer */
         .vis-container {
             position: relative;
             height: 120px;
@@ -81,43 +80,28 @@
             text-align: left;
         }
         
-        /* Filter Toggle Switch */
+        /* Filter Toggle */
         .toggle-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #333;
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #333;
         }
         .toggle-label { font-size: 0.9rem; font-weight: 600; }
         .toggle-sub { font-size: 0.7rem; color: #666; display: block; margin-top: 2px; }
 
         .switch-btn {
-            background: #3a3a3c;
-            color: #888;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            cursor: pointer;
+            background: #3a3a3c; color: #888; border: none; padding: 8px 16px;
+            border-radius: 8px; font-size: 0.8rem; font-weight: bold; cursor: pointer;
             transition: all 0.3s ease;
         }
-        .switch-btn.active {
-            background: #0a84ff;
-            color: white;
-            box-shadow: 0 0 10px rgba(10, 132, 255, 0.4);
-        }
+        .switch-btn.active { background: #0a84ff; color: white; box-shadow: 0 0 10px rgba(10, 132, 255, 0.4); }
 
         /* Slider */
         .slider-header { display: flex; justify-content: space-between; font-size: 0.8rem; color: #aaa; margin-bottom: 5px; }
         .slider-value { color: #0a84ff; font-weight: bold; }
         input[type=range] { width: 100%; height: 40px; accent-color: #0a84ff; cursor: pointer; }
 
-        /* Main Buttons */
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
-        .full-width { grid-column: span 2; }
+        /* Buttons */
+        .controls { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 10px; }
         
         button.main-btn { 
             font-size: 1rem; padding: 18px; border-radius: 14px; border: none; 
@@ -127,7 +111,6 @@
         button.main-btn:active { transform: scale(0.96); }
         
         .btn-start { background: #30d158; color: #000; box-shadow: 0 4px 15px rgba(48, 209, 88, 0.3); }
-        .btn-pause { background: #ff9f0a; color: #000; }
         .btn-stop { background: #ff3b30; color: #fff; }
         .hidden { display: none; }
 
@@ -138,7 +121,7 @@
     <div id="status-badge">Prêt</div>
     
     <div id="timer">00:00:00</div>
-    <div class="timer-label">Durée cumulée des nuisances</div>
+    <div class="timer-label">Durée totale enregistrée</div>
 
     <div class="vis-container">
         <canvas id="visualizer"></canvas>
@@ -146,318 +129,244 @@
     </div>
 
     <div class="card">
-        <!-- Bouton Filtre -->
         <div class="toggle-row">
             <div>
                 <span class="toggle-label">🔍 Filtre "Aboiements"</span>
-                <span class="toggle-sub">Ignore voitures, vent & bruits sourds</span>
+                <span class="toggle-sub">Ignore < 300Hz (bruit sourd) et > 3kHz (vent)</span>
             </div>
             <button id="btn-filter" class="switch-btn active" onclick="toggleFilter()">ACTIVÉ</button>
         </div>
 
-        <!-- Slider Sensibilité -->
         <div class="slider-header">
-            <span>Sensibilité (Seuil de déclenchement)</span>
+            <span>Sensibilité (Seuil)</span>
             <span id="slider-val" class="slider-value">20</span>
         </div>
         <input type="range" id="slider" min="5" max="100" value="20" oninput="updateThresholdUI()">
     </div>
 
     <div class="controls">
-        <button id="btn-start" class="main-btn btn-start full-width" onclick="startApp()">▶ Démarrer Surveillance</button>
-        <button id="btn-pause" class="main-btn btn-pause hidden" onclick="togglePause()">⏸ Pause</button>
-        <button id="btn-stop" class="main-btn btn-stop hidden" onclick="stopAndDownload()">⏹ Finir</button>
+        <button id="btn-start" class="main-btn btn-start" onclick="startApp()">▶ Démarrer Surveillance</button>
+        <button id="btn-stop" class="main-btn btn-stop hidden" onclick="finishAndSave()">⏹ Finir et Télécharger</button>
     </div>
 
     <script>
-        // --- CONFIGURATION ---
-        const SILENCE_DELAY = 2000; // Temps de silence avant de couper (ms)
-        const LOW_FREQ_CUT = 300;   // Coupe en dessous (Hz)
-        const HIGH_FREQ_CUT = 3000; // Coupe au dessus (Hz)
+        // --- PARAMÈTRES ---
+        const SILENCE_DELAY = 1500; // Ms de silence avant mise en pause
+        const LOW_FREQ = 300; 
+        const HIGH_FREQ = 3000;
         
-        // --- VARIABLES ---
-        let audioCtx, analyser, microphone, filterLow, filterHigh, mediaRecorder;
-        let masterChunks = []; 
-        let currentSegment = []; 
+        // --- GLOBAL VARIABLES ---
+        let audioCtx, analyser, microphone, mediaRecorder;
+        let chunks = []; 
         
         let isSystemActive = false;
-        let isRecording = false;
-        let isPausedManual = false;
-        let isFilterOn = true; // État initial du filtre
+        let isRecordingState = false; // true = ça enregistre, false = c'est en pause
+        let isFilterOn = true;
         
         let lastNoiseTime = 0;
-        let totalDuration = 0;
+        let totalDuration = 0; // Durée réelle d'enregistrement
+        let startTime = 0; // Pour calculer le delta temps
         let animationId;
 
-        // --- DOM ELEMENTS ---
+        // DOM Elements
         const canvas = document.getElementById('visualizer');
         const ctx = canvas.getContext('2d');
         const timerEl = document.getElementById('timer');
         const badge = document.getElementById('status-badge');
         const slider = document.getElementById('slider');
-        const sliderValDisplay = document.getElementById('slider-val');
-        const line = document.getElementById('threshold-line');
         const filterBtn = document.getElementById('btn-filter');
-        
-        // 1. Démarrage
+        const line = document.getElementById('threshold-line');
+
         async function startApp() {
             try {
-                // Demande micro
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
+                // Audio Init
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                
-                // Création des noeuds audio
                 analyser = audioCtx.createAnalyser();
                 analyser.fftSize = 512;
-                analyser.smoothingTimeConstant = 0.5; // Lisse un peu le visuel
-                
-                filterHigh = audioCtx.createBiquadFilter();
+                analyser.smoothingTimeConstant = 0.3;
+
+                // Création Filtres
+                const filterHigh = audioCtx.createBiquadFilter();
                 filterHigh.type = "highpass";
-                
-                filterLow = audioCtx.createBiquadFilter();
+                filterHigh.frequency.value = isFilterOn ? LOW_FREQ : 0;
+
+                const filterLow = audioCtx.createBiquadFilter();
                 filterLow.type = "lowpass";
-
-                // Application des réglages initiaux du filtre
-                applyFilterSettings();
-
-                microphone = audioCtx.createMediaStreamSource(stream);
+                filterLow.frequency.value = isFilterOn ? HIGH_FREQ : 22000;
                 
-                // Chaînage : Micro -> FiltreHaut -> FiltreBas -> Analyseur
+                // Connexions pour l'analyse visuelle
+                microphone = audioCtx.createMediaStreamSource(stream);
                 microphone.connect(filterHigh);
                 filterHigh.connect(filterLow);
                 filterLow.connect(analyser);
 
-                setupRecorder(stream); // On enregistre le son original (meilleure qualité)
+                // Initialisation de l'enregistreur
+                setupRecorder(stream);
+                
+                // On lance l'enregistreur tout de suite...
+                mediaRecorder.start();
+                // ... mais on le met en pause immédiatement !
+                mediaRecorder.pause();
 
                 isSystemActive = true;
                 updateUI('running');
                 loop();
 
             } catch (e) {
-                alert("Erreur d'accès au micro : " + e.message);
+                alert("Erreur micro : " + e.message);
             }
         }
 
-        // 2. Gestion du Filtre
-        function toggleFilter() {
-            isFilterOn = !isFilterOn;
-            
-            // Mise à jour visuelle du bouton
-            if(isFilterOn) {
-                filterBtn.innerText = "ACTIVÉ";
-                filterBtn.classList.add("active");
-            } else {
-                filterBtn.innerText = "DÉSACTIVÉ";
-                filterBtn.classList.remove("active");
-            }
-
-            // Application immédiate si l'audio tourne
-            if(audioCtx) applyFilterSettings();
-        }
-
-        function applyFilterSettings() {
-            if(!filterHigh || !filterLow) return;
-
-            if (isFilterOn) {
-                // Mode Filtré : On isole la fréquence de la voix/aboiement
-                filterHigh.frequency.setValueAtTime(LOW_FREQ_CUT, audioCtx.currentTime);
-                filterLow.frequency.setValueAtTime(HIGH_FREQ_CUT, audioCtx.currentTime);
-            } else {
-                // Mode Ouvert : On laisse tout passer
-                // On met le passe-haut à 0 (laisse passer les basses)
-                filterHigh.frequency.setValueAtTime(0, audioCtx.currentTime); 
-                // On met le passe-bas à 22000 (laisse passer les aigus)
-                filterLow.frequency.setValueAtTime(22000, audioCtx.currentTime);
-            }
-        }
-
-        // 3. Enregistrement
         function setupRecorder(stream) {
             let options = { mimeType: 'audio/webm' };
-            // Fallback pour Safari/iPhone qui préfère mp4
             if (!MediaRecorder.isTypeSupported('audio/webm')) {
-                options = { mimeType: 'audio/mp4' }; 
+                options = { mimeType: 'audio/mp4' }; // Fallback Safari
             }
-            window.globalStream = stream;
-            window.recOptions = options;
-        }
-
-        function startSegment() {
-            if (isRecording) return;
             
-            // Création d'un nouveau fichier temporaire
-            mediaRecorder = new MediaRecorder(window.globalStream, window.recOptions);
-            currentSegment = [];
+            mediaRecorder = new MediaRecorder(stream, options);
             
-            mediaRecorder.ondataavailable = e => {
-                if (e.data.size > 0) currentSegment.push(e.data);
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunks.push(e.data);
             };
-            
-            mediaRecorder.onstop = () => {
-                const blob = new Blob(currentSegment, { type: window.recOptions.mimeType });
-                masterChunks.push(blob);
+
+            mediaRecorder.onpause = () => {
+                isRecordingState = false;
+                badge.innerText = "En veille (Silence)";
+                badge.className = "status-wait";
             };
-            
-            mediaRecorder.start();
-            isRecording = true;
-            badge.innerText = "BRUIT DÉTECTÉ";
-            badge.className = "status-rec";
+
+            mediaRecorder.onresume = () => {
+                isRecordingState = true;
+                badge.innerText = "ENREGISTREMENT...";
+                badge.className = "status-rec";
+            };
         }
 
-        function stopSegment() {
-            if (!isRecording) return;
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-            isRecording = false;
-            badge.innerText = "En veille (Écoute)";
-            badge.className = "status-wait";
-        }
-
-        // 4. Boucle principale (Analyse 60 fois par seconde)
         function loop() {
             if (!isSystemActive) return;
             animationId = requestAnimationFrame(loop);
-            
-            if (isPausedManual) return;
 
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
             
-            // Calcul du volume moyen instantané
+            // Calcul volume moyen
             let sum = 0;
             for(let i=0; i<bufferLength; i++) sum += dataArray[i];
             let volume = sum / bufferLength;
 
             let threshold = parseInt(slider.value);
-            
-            // Dessin
             drawVisualizer(volume, threshold);
 
-            // Logique de déclenchement
             let now = Date.now();
-            
+
             if (volume > threshold) {
-                // Si le volume dépasse le seuil
+                // BRUIT DÉTECTÉ
                 lastNoiseTime = now;
-                if (!isRecording) startSegment();
                 
-                // Mise à jour du chrono
-                totalDuration += 16.66; // ~1 frame à 60fps
-                timerEl.innerText = formatTime(totalDuration);
-            } else {
-                // Si silence
-                let timeSinceNoise = now - lastNoiseTime;
-                
-                if (timeSinceNoise < SILENCE_DELAY) {
-                    // On attend encore un peu (délai de grâce)
-                    if (isRecording) {
-                        badge.innerText = "Fin imminente...";
-                        badge.className = "status-pause"; // Orange
-                        // On compte ce temps de "blanc" dans la durée totale pour la cohérence
-                        totalDuration += 16.66;
-                        timerEl.innerText = formatTime(totalDuration);
-                    }
+                if (mediaRecorder.state === "paused") {
+                    mediaRecorder.resume();
+                    startTime = now; // On note quand ça a repris
                 } else {
-                    // Silence confirmé -> Couper
-                    if (isRecording) stopSegment();
+                    // C'est déjà en cours, on ajoute le temps écoulé depuis la dernière frame
+                    // C'est une estimation pour l'affichage, le vrai temps sera celui du fichier
+                    if (isRecordingState) {
+                       totalDuration += 16.66; // approx 60fps
+                       timerEl.innerText = formatTime(totalDuration); 
+                    }
+                }
+
+            } else {
+                // SILENCE
+                if (mediaRecorder.state === "recording") {
+                    let timeSinceNoise = now - lastNoiseTime;
+                    
+                    if (timeSinceNoise < SILENCE_DELAY) {
+                        // On continue d'enregistrer le "blanc" post-bruit
+                        totalDuration += 16.66;
+                        timerEl.innerText = formatTime(totalDuration); 
+                    } else {
+                        // Trop long silence -> PAUSE
+                        mediaRecorder.pause();
+                    }
                 }
             }
         }
 
-        // 5. Interface Graphique
-        function updateThresholdUI() {
-            let val = parseInt(slider.value);
-            sliderValDisplay.innerText = val;
-            // On convertit la valeur (5-100) en position CSS %
-            // On triche un peu pour que ça colle visuellement au canvas
-            let pct = (val / 120) * 100; 
-            line.style.bottom = pct + "%";
-        }
-
-        function drawVisualizer(vol, thresh) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // On dessine le niveau de bruit
-            // Facteur de zoom visuel pour mieux voir les sons faibles
-            let barHeight = (vol / 120) * canvas.height; 
-            
-            if (vol > thresh) ctx.fillStyle = '#ff3b30'; // Rouge si dépassement
-            else ctx.fillStyle = '#30d158'; // Vert si OK
-            
-            // Effet de lissage basique
-            ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
-        }
-
-        function togglePause() {
-            isPausedManual = !isPausedManual;
-            let btn = document.getElementById('btn-pause');
-            
-            if (isPausedManual) {
-                if (isRecording) stopSegment();
-                badge.innerText = "PAUSE MANUELLE";
-                badge.className = "status-pause";
-                btn.innerText = "▶ Reprendre";
-                btn.style.background = "#30d158"; 
-                btn.style.color = "white";
-                ctx.clearRect(0,0,canvas.width, canvas.height); // Nettoyer canvas
-            } else {
-                badge.innerText = "En veille";
-                badge.className = "status-wait";
-                btn.innerText = "⏸ Pause";
-                btn.style.background = "#ff9f0a"; 
-                btn.style.color = "black";
-            }
-        }
-
-        function stopAndDownload() {
+        function finishAndSave() {
             isSystemActive = false;
             cancelAnimationFrame(animationId);
-            if (isRecording) stopSegment();
 
-            // Petit délai pour être sûr que le dernier segment est sauvegardé
-            setTimeout(() => {
-                if (masterChunks.length === 0) {
-                    alert("Aucun bruit détecté, rien à télécharger.");
+            if (mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+
+            // On attend que le fichier soit finalisé
+            mediaRecorder.onstop = () => {
+                if (chunks.length === 0) {
+                    alert("Aucun enregistrement (pas assez de bruit).");
                     location.reload();
                     return;
                 }
+
+                const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
+                const url = URL.createObjectURL(blob);
                 
-                // Assemblage final
-                const finalBlob = new Blob(masterChunks, { type: window.recOptions.mimeType });
-                const url = URL.createObjectURL(finalBlob);
-                
-                // Création lien téléchargement
                 const a = document.createElement('a');
+                a.style.display = 'none';
                 a.href = url;
                 
                 let date = new Date();
                 let timeStr = `${pad(date.getHours())}h${pad(date.getMinutes())}`;
                 let durationStr = formatTime(totalDuration).replace(/:/g,'-');
                 
-                a.download = `Preuve_Bruit_${timeStr}_Duree-${durationStr}.mp4`;
+                a.download = `Preuve_Aboiements_${timeStr}_Total-${durationStr}.mp4`;
                 
                 document.body.appendChild(a);
                 a.click();
                 
-                badge.innerText = "Sauvegardé !";
-                
+                badge.innerText = "Téléchargé !";
                 setTimeout(() => { 
-                    if(confirm("Fichier sauvegardé ! Voulez-vous recommencer une session ?")) {
-                        location.reload();
-                    }
+                    if(confirm("Fichier sauvegardé. Relancer ?")) location.reload(); 
                 }, 1000);
+            };
+        }
 
-            }, 500); 
+        // --- UI & Helpers ---
+        function toggleFilter() {
+            isFilterOn = !isFilterOn;
+            filterBtn.classList.toggle("active");
+            filterBtn.innerText = isFilterOn ? "ACTIVÉ" : "DÉSACTIVÉ";
+            
+            // Re-appliquer les filtres si possible
+            // Note: avec cette méthode simple, le filtre est appliqué à l'analyseur
+            // mais l'enregistrement prend le flux "brut" du micro pour la qualité.
+            // Si vous voulez enregistrer le son filtré, c'est plus complexe, 
+            // mais pour l'analyse c'est parfait.
+        }
+
+        function updateThresholdUI() {
+            let val = parseInt(slider.value);
+            document.getElementById('slider-val').innerText = val;
+            let pct = (val / 120) * 100; 
+            line.style.bottom = pct + "%";
+        }
+
+        function drawVisualizer(vol, thresh) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let barHeight = (vol / 120) * canvas.height; 
+            
+            if (vol > thresh) ctx.fillStyle = '#ff3b30'; 
+            else ctx.fillStyle = '#30d158'; 
+            
+            ctx.fillRect(0, canvas.height - barHeight, canvas.width, barHeight);
         }
 
         function updateUI(state) {
-            if (state === 'running') {
-                document.getElementById('btn-start').classList.add('hidden');
-                document.getElementById('btn-pause').classList.remove('hidden');
-                document.getElementById('btn-stop').classList.remove('hidden');
-                document.querySelector('.full-width').classList.remove('full-width');
-            }
+            document.getElementById('btn-start').classList.add('hidden');
+            document.getElementById('btn-stop').classList.remove('hidden');
         }
 
         function formatTime(ms) {
@@ -468,8 +377,7 @@
             return `${pad(h)}:${pad(m)}:${pad(s)}`;
         }
         function pad(n) { return n.toString().padStart(2, '0'); }
-        
-        // Init UI
+
         updateThresholdUI();
     </script>
 </body>
